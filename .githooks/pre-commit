@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+set -eu
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged_files" ] && exit 0
+
+for file in $staged_files; do
+  case "$file" in
+    .env|.env.*|firebase-applet-config.json|firebase_applet_config.xml|*.pem|*.key)
+      case "$file" in
+        .env.example|firebase-applet-config.example.json) ;;
+        *)
+          echo "BLOCKED: sensitive file '$file' must not be committed." >&2
+          exit 1
+          ;;
+      esac
+      ;;
+  esac
+done
+
+if git diff --cached -U0 | grep -qE '(AIza[0-9A-Za-z_-]{35}|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----)'; then
+  echo "BLOCKED: potential secret or private key detected in staged diff." >&2
+  exit 1
+fi

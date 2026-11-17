@@ -1,10 +1,11 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
+  type Auth,
   type User,
 } from 'firebase/auth';
 import {
@@ -22,13 +23,50 @@ import {
   Timestamp,
   updateDoc,
   where,
+  type Firestore,
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
 import type { DocumentAnalysis, Language, SavedAnalysisRecord } from '../types/document';
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
+interface FirebaseAppletConfig {
+  projectId?: string;
+  appId?: string;
+  apiKey?: string;
+  authDomain?: string;
+  firestoreDatabaseId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  measurementId?: string;
+}
+
+const localConfigModules = import.meta.glob<{ default: FirebaseAppletConfig }>(
+  '/firebase-applet-config.json',
+  { eager: true }
+);
+const localFileConfig: FirebaseAppletConfig =
+  localConfigModules['/firebase-applet-config.json']?.default ?? {};
+
+const firebaseConfig: FirebaseAppletConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || localFileConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || localFileConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || localFileConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || localFileConfig.storageBucket,
+  messagingSenderId:
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || localFileConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || localFileConfig.appId,
+  firestoreDatabaseId:
+    import.meta.env.VITE_FIREBASE_DATABASE_ID || localFileConfig.firestoreDatabaseId,
+  measurementId: localFileConfig.measurementId,
+};
+
+const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+
+const app: FirebaseApp | null = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
+export const db: Firestore | null = app
+  ? firebaseConfig.firestoreDatabaseId
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app)
+  : null;
+export const auth: Auth | null = app ? getAuth(app) : null;
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -67,13 +105,13 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+      tenantId: auth?.currentUser?.tenantId,
       providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
+        auth?.currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,
           email: provider.email,
         })) || [],
@@ -86,6 +124,7 @@ export function handleFirestoreError(
 }
 
 async function testConnection() {
+  if (!db) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
@@ -129,17 +168,30 @@ function buildSafeAnalysisId(): string {
   return `scan_${raw.replace(/[^a-zA-Z0-9_-]/g, '')}`.slice(0, 128);
 }
 
+function requireFirebase(): { auth: Auth; db: Firestore } {
+  if (!auth || !db) {
+    throw new Error('Firebase is not configured. Set VITE_FIREBASE_* environment variables.');
+  }
+  return { auth, db };
+}
+
 export function subscribeAuthState(callback: (user: User | null) => void) {
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
   return onAuthStateChanged(auth, callback);
 }
 
 export async function signInWithGoogle(preferredLanguage: Language): Promise<User> {
-  const cred = await signInWithPopup(auth, googleProvider);
+  const { auth: activeAuth } = requireFirebase();
+  const cred = await signInWithPopup(activeAuth, googleProvider);
   await ensureUserProfile(cred.user, preferredLanguage);
   return cred.user;
 }
 
 export async function signOutUser(): Promise<void> {
+  if (!auth) return;
   await signOut(auth);
 }
 
@@ -147,8 +199,9 @@ export async function ensureUserProfile(
   user: User,
   preferredLanguage: Language
 ): Promise<Language> {
+  const { db: activeDb } = requireFirebase();
   const path = `users/${user.uid}`;
-  const ref = doc(db, 'users', user.uid);
+  const ref = doc(activeDb, 'users', user.uid);
   try {
     const snap = await getDoc(ref);
     const displayName = (user.displayName ?? 'Samajh User').slice(0, 120);
@@ -188,9 +241,10 @@ export async function updatePreferredLanguage(
   userId: string,
   preferredLanguage: Language
 ): Promise<void> {
+  const { db: activeDb } = requireFirebase();
   const path = `users/${userId}`;
   try {
-    await updateDoc(doc(db, 'users', userId), {
+    await updateDoc(doc(activeDb, 'users', userId), {
       preferredLanguage,
       updatedAt: serverTimestamp(),
     });
@@ -204,6 +258,10 @@ export function subscribeSavedAnalyses(
   onData: (items: SavedAnalysisRecord[]) => void,
   onError: (err: Error) => void
 ) {
+  if (!db) {
+    onData([]);
+    return () => {};
+  }
   const path = `users/${userId}/analyses`;
   const q = query(
     collection(db, 'users', userId, 'analyses'),
@@ -253,12 +311,13 @@ export async function saveAnalysisToAccount(
   completedSteps: number[],
   existingId?: string | null
 ): Promise<string> {
+  const { db: activeDb } = requireFirebase();
   await ensureUserProfile(user, language);
   const analysisId = existingId && /^[a-zA-Z0-9_-]{1,128}$/.test(existingId)
     ? existingId
     : buildSafeAnalysisId();
   const path = `users/${user.uid}/analyses/${analysisId}`;
-  const ref = doc(db, 'users', user.uid, 'analyses', analysisId);
+  const ref = doc(activeDb, 'users', user.uid, 'analyses', analysisId);
   const sanitized = sanitizeAnalysisForFirestore(analysis);
   const cleanSteps = completedSteps
     .filter((n) => Number.isInteger(n) && n >= 0 && n < MAX_LIST_ITEMS)
@@ -294,12 +353,13 @@ export async function updateSavedSteps(
   analysisId: string,
   completedSteps: number[]
 ): Promise<void> {
+  const { db: activeDb } = requireFirebase();
   const path = `users/${userId}/analyses/${analysisId}`;
   const cleanSteps = completedSteps
     .filter((n) => Number.isInteger(n) && n >= 0 && n < MAX_LIST_ITEMS)
     .slice(0, MAX_LIST_ITEMS);
   try {
-    await updateDoc(doc(db, 'users', userId, 'analyses', analysisId), {
+    await updateDoc(doc(activeDb, 'users', userId, 'analyses', analysisId), {
       completedSteps: cleanSteps,
       updatedAt: serverTimestamp(),
     });
@@ -312,9 +372,10 @@ export async function deleteSavedAnalysis(
   userId: string,
   analysisId: string
 ): Promise<void> {
+  const { db: activeDb } = requireFirebase();
   const path = `users/${userId}/analyses/${analysisId}`;
   try {
-    await deleteDoc(doc(db, 'users', userId, 'analyses', analysisId));
+    await deleteDoc(doc(activeDb, 'users', userId, 'analyses', analysisId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }

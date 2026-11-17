@@ -22,12 +22,18 @@ import {
   SITE_PAGES,
   type AppRoute,
 } from './src/data/sitePages.ts';
-import type { DocumentAnalysis, Language } from './src/types/document.ts';
+import {
+  validateAnalyzeBody,
+  validateAskBody,
+  validateContactBody,
+  validateEnvConfig,
+  validateTranslateBody,
+} from './src/lib/requestSchemas.ts';
+import type { Language } from './src/types/document.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = Number(process.env.PORT || 3000);
 const MODEL_NAME = 'gemini-4-hydrogen';
 const REQUEST_TIMEOUT_MS = 25000;
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -58,8 +64,17 @@ function getGeminiClient(): GoogleGenAI {
   });
 }
 
-function isValidLanguage(lang: unknown): lang is Language {
-  return lang === 'en' || lang === 'hi';
+function sanitizeHostHeader(rawHost: string | undefined, fallbackPort: number): string {
+  const candidate = String(rawHost || '').trim();
+  if (/^[a-z0-9.-]+(?::\d{1,5})?$/i.test(candidate)) {
+    return candidate;
+  }
+  return `localhost:${fallbackPort}`;
+}
+
+function normalizeSafeRedirectPath(rawUrl: string): string {
+  const collapsed = rawUrl.replace(/^\/+/, '/');
+  return collapsed.startsWith('/') ? collapsed : `/${collapsed}`;
 }
 
 function sanitizeUploadedPages(
@@ -116,6 +131,9 @@ function createRateLimiter(maxRequests: number, windowMs: number) {
     const now = Date.now();
     const recent = (hits.get(ip) ?? []).filter((ts) => now - ts < windowMs);
     if (recent.length >= maxRequests) {
+      const oldestTs = recent[0] ?? now;
+      const retryAfterSeconds = Math.max(1, Math.ceil((oldestTs + windowMs - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
       res.status(429).json({ error: 'Too many requests. Please wait a few minutes before trying again.' });
       return;
     }
@@ -128,6 +146,54 @@ function createRateLimiter(maxRequests: number, windowMs: number) {
     }
     next();
   };
+}
+
+const SENSITIVE_EXACT_PATHS = new Set([
+  '/firebase-applet-config.json',
+  '/firebase-applet-config.example.json',
+  '/firebase-blueprint.json',
+  '/firebase_applet_config.xml',
+  '/package.json',
+  '/package-lock.json',
+  '/bun.lock',
+  '/tsconfig.json',
+  '/eslint.config.mjs',
+  '/vite.config.ts',
+  '/firestore.rules',
+  '/firestore.rules.test.ts',
+  '/server.ts',
+  '/metadata.json',
+  '/security_spec.md',
+  '/readme.md',
+]);
+
+function isBlockedSensitivePath(rawPath: string, hasViteImportQuery = false): boolean {
+  let decoded = rawPath;
+  try {
+    decoded = decodeURIComponent(rawPath);
+  } catch {
+    return true;
+  }
+  const normalized = decoded.replace(/\\/g, '/').toLowerCase();
+  if (!IS_PROD && normalized.startsWith('/node_modules/.vite/')) {
+    return false;
+  }
+  if (!IS_PROD && hasViteImportQuery && normalized === '/firebase-applet-config.json') {
+    return false;
+  }
+  if (/(^|\/)\.[^/]+/.test(normalized)) {
+    return true;
+  }
+  if (SENSITIVE_EXACT_PATHS.has(normalized)) {
+    return true;
+  }
+  if (/\.(env|sql|bak|zip|tar|gz|tgz|map|rules|log|pem|key|crt|p12)$/i.test(normalized)) {
+    return true;
+  }
+  if (IS_PROD && /\.(ts|tsx)$/i.test(normalized)) {
+    return true;
+  }
+  return false;
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -255,28 +321,41 @@ const ASK_SCHEMA = {
 };
 
 async function startServer() {
+  const envConfig = validateEnvConfig(process.env, IS_PROD);
+  if (!envConfig.geminiConfigured) {
+    console.warn('Notice: GEMINI_API_KEY is not configured; live scanning requires a server key.');
+  }
+
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
 
   app.use((req, res, next) => {
-    const rawHost = String(req.headers.host || '').trim();
-    const hostNoPort = rawHost.split(':')[0].toLowerCase();
+    if (isBlockedSensitivePath(req.path, Object.prototype.hasOwnProperty.call(req.query, 'import'))) {
+      res.status(404).type('text/plain').send('Not found');
+      return;
+    }
+
+    const safeHost = sanitizeHostHeader(req.headers.host, envConfig.port);
+    const hostNoPort = safeHost.split(':')[0].toLowerCase();
+    const safePathAndQuery = normalizeSafeRedirectPath(req.originalUrl || '/');
 
     if (hostNoPort.startsWith('www.')) {
-      const targetHost = rawHost.replace(/^www\./i, '');
-      const proto = IS_PROD ? 'https' : String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
-      res.redirect(301, `${proto}://${targetHost}${req.originalUrl}`);
+      const targetOrigin =
+        IS_PROD && envConfig.appUrl
+          ? envConfig.appUrl
+          : `${IS_PROD ? 'https' : String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim() === 'https' ? 'https' : 'http'}://${safeHost.replace(/^www\./i, '')}`;
+      res.redirect(301, `${targetOrigin}${safePathAndQuery}`);
       return;
     }
 
     if (
       IS_PROD &&
       req.path !== '/api/health' &&
-      req.headers['x-forwarded-proto'] === 'http' &&
-      rawHost
+      req.headers['x-forwarded-proto'] === 'http'
     ) {
-      res.redirect(301, `https://${rawHost}${req.originalUrl}`);
+      const targetOrigin = envConfig.appUrl || `https://${safeHost}`;
+      res.redirect(301, `${targetOrigin}${safePathAndQuery}`);
       return;
     }
 
@@ -286,6 +365,10 @@ async function startServer() {
     const styleSrc = IS_PROD
       ? "style-src 'self' https://fonts.googleapis.com"
       : "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com";
+    const frameAncestors =
+      IS_PROD && !isPreviewOrStaging(req)
+        ? "frame-ancestors 'self'"
+        : "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.googleusercontent.com https://*.usercontent.goog https://*.run.app";
     const csp = [
       "default-src 'self'",
       scriptSrc,
@@ -297,13 +380,20 @@ async function startServer() {
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.googleusercontent.com https://*.usercontent.goog https://*.run.app",
+      frameAncestors,
       ...(IS_PROD ? ['upgrade-insecure-requests'] : []),
     ].join('; ');
 
     res.setHeader('Content-Security-Policy', csp);
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader(
+      'Cross-Origin-Opener-Policy',
+      req.path.startsWith('/api/') ? 'same-origin' : 'same-origin-allow-popups'
+    );
+    if (IS_PROD && !isPreviewOrStaging(req)) {
+      res.setHeader('X-Frame-Options', 'DENY');
+    }
     res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
     if (IS_PROD) {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -311,51 +401,58 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: '16mb' }));
-  app.use('/api/', createRateLimiter(30, 15 * 60 * 1000));
+  app.use('/api/', (req, res, next) => {
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      const host = String(req.headers.host || '').trim().toLowerCase();
+      const allowedOrigins = new Set<string>();
+      if (host) {
+        allowedOrigins.add(`https://${host}`);
+        if (!IS_PROD) {
+          allowedOrigins.add(`http://${host}`);
+        }
+      }
+      if (envConfig.appUrl) {
+        allowedOrigins.add(envConfig.appUrl.toLowerCase());
+      }
+      if (!allowedOrigins.has(requestOrigin.toLowerCase())) {
+        res.status(403).json({ error: 'Origin not allowed.' });
+        return;
+      }
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      if (req.method === 'OPTIONS') {
+        res.status(204).end();
+        return;
+      }
+    }
+    next();
+  });
+
+  app.use('/api/', createRateLimiter(45, 15 * 60 * 1000));
   const analyzeLimiter = createRateLimiter(10, 10 * 60 * 1000);
+  const translateLimiter = createRateLimiter(15, 10 * 60 * 1000);
+  const askLimiter = createRateLimiter(20, 10 * 60 * 1000);
   const contactLimiter = createRateLimiter(5, 15 * 60 * 1000);
+
+  const contactJsonParser = express.json({ limit: '32kb' });
+  const translateJsonParser = express.json({ limit: '256kb' });
+  const documentJsonParser = express.json({ limit: '16mb' });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
   });
 
-  app.post('/api/contact', contactLimiter, (req, res) => {
-    const body = req.body as {
-      name?: unknown;
-      email?: unknown;
-      message?: unknown;
-      website?: unknown;
-      utm?: unknown;
-    };
-
-    if (typeof body?.website === 'string' && body.website.trim().length > 0) {
-      res.status(400).json({ error: 'Unable to send message right now.' });
+  app.post('/api/contact', contactLimiter, contactJsonParser, (req, res) => {
+    const checked = validateContactBody(req.body);
+    if (!checked.ok) {
+      res.status(400).json({ error: checked.error });
       return;
     }
 
-    const name = typeof body?.name === 'string' ? body.name.trim() : '';
-    const email = typeof body?.email === 'string' ? body.email.trim() : '';
-    const message = typeof body?.message === 'string' ? body.message.trim() : '';
-
-    if (name.length < 2 || name.length > 120) {
-      res.status(400).json({ error: 'Please enter your name (2 to 120 characters).' });
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-      res.status(400).json({ error: 'Please enter a valid email address.' });
-      return;
-    }
-    if (message.length < 10 || message.length > 2000) {
-      res.status(400).json({ error: 'Please enter a message (10 to 2000 characters).' });
-      return;
-    }
-
-    const rawUtm = body?.utm && typeof body.utm === 'object' ? (body.utm as Record<string, unknown>) : {};
-    const utmSource = typeof rawUtm.utm_source === 'string' ? rawUtm.utm_source.slice(0, 120) : '';
-    const utmMedium = typeof rawUtm.utm_medium === 'string' ? rawUtm.utm_medium.slice(0, 120) : '';
-    const utmCampaign = typeof rawUtm.utm_campaign === 'string' ? rawUtm.utm_campaign.slice(0, 120) : '';
-
+    const { name, email, message, utmSource, utmMedium, utmCampaign } = checked.data;
     res.status(200).json({
       ok: true,
       received: Boolean(name && email && message),
@@ -363,14 +460,15 @@ async function startServer() {
     });
   });
 
-  app.post('/api/analyze', analyzeLimiter, async (req, res) => {
+  app.post('/api/analyze', analyzeLimiter, documentJsonParser, async (req, res) => {
     try {
-      const { pages, language } = req.body as {
-        pages?: unknown;
-        language?: unknown;
-      };
+      const bodyCheck = validateAnalyzeBody(req.body);
+      if (!bodyCheck.ok) {
+        res.status(400).json({ error: bodyCheck.error });
+        return;
+      }
 
-      const targetLang: Language = isValidLanguage(language) ? language : 'en';
+      const { pages, language: targetLang } = bodyCheck.data;
       const checked = sanitizeUploadedPages(pages);
       if (!checked.ok) {
         res.status(400).json({ error: checked.error });
@@ -415,17 +513,15 @@ Security and grounding rules:
     }
   });
 
-  app.post('/api/translate', async (req, res) => {
+  app.post('/api/translate', translateLimiter, translateJsonParser, async (req, res) => {
     try {
-      const { analysis, targetLanguage } = req.body as {
-        analysis?: DocumentAnalysis;
-        targetLanguage?: unknown;
-      };
-
-      if (!analysis || typeof analysis !== 'object' || !isValidLanguage(targetLanguage)) {
-        res.status(400).json({ error: 'Valid document summary and target language are required.' });
+      const checked = validateTranslateBody(req.body);
+      if (!checked.ok) {
+        res.status(400).json({ error: checked.error });
         return;
       }
+
+      const { analysis, targetLanguage } = checked.data;
 
       const ai = getGeminiClient();
       const prompt = `Translate the untrusted JSON data delimited below into ${LANGUAGE_NAMES[targetLanguage]}.
@@ -463,26 +559,15 @@ ${JSON.stringify(analysis)}
     }
   });
 
-  app.post('/api/ask', async (req, res) => {
+  app.post('/api/ask', askLimiter, documentJsonParser, async (req, res) => {
     try {
-      const { question, language, analysis, pages } = req.body as {
-        question?: string;
-        language?: unknown;
-        analysis?: DocumentAnalysis;
-        pages?: unknown;
-      };
-
-      if (!question || typeof question !== 'string' || !question.trim() || question.trim().length > 500) {
-        res.status(400).json({ error: 'Please enter a short question (up to 500 characters).' });
+      const bodyCheck = validateAskBody(req.body);
+      if (!bodyCheck.ok) {
+        res.status(400).json({ error: bodyCheck.error });
         return;
       }
 
-      if (!analysis || typeof analysis !== 'object') {
-        res.status(400).json({ error: 'No analyzed document found in this session.' });
-        return;
-      }
-
-      const targetLang: Language = isValidLanguage(language) ? language : 'en';
+      const { question, language: targetLang, analysis, pages } = bodyCheck.data;
       const parts: Array<
         | { inlineData: { mimeType: string; data: string } }
         | { text: string }
@@ -550,14 +635,14 @@ Instructions:
   }
 
   function resolveOrigin(req: express.Request): string {
-    const envUrl = process.env.APP_URL;
-    const host = String(req.headers.host || `localhost:${PORT}`).replace(/^www\./i, '');
-    const isLocalHost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
-    if (!isLocalHost && envUrl && envUrl !== 'MY_APP_URL' && /^https?:\/\//i.test(envUrl)) {
-      return envUrl.replace(/\/+$/, '');
+    const safeHost = sanitizeHostHeader(req.headers.host, envConfig.port).replace(/^www\./i, '');
+    const isLocalHost = safeHost.startsWith('localhost') || safeHost.startsWith('127.0.0.1');
+    if (!isLocalHost && envConfig.appUrl) {
+      return envConfig.appUrl;
     }
-    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
-    return `${proto}://${host}`;
+    const rawProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim().toLowerCase();
+    const proto = rawProto === 'https' ? 'https' : 'http';
+    return `${proto}://${safeHost}`;
   }
 
   function isPreviewOrStaging(req: express.Request): boolean {
@@ -820,9 +905,34 @@ Instructions:
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Samajh server running on http://0.0.0.0:${PORT}`);
+  app.use('/api/*', (_req, res) => {
+    res.status(404).json({ error: 'Endpoint not found.' });
+  });
+
+  app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const errObj = err as { type?: string; status?: number };
+    if (errObj?.type === 'entity.too.large') {
+      res.status(413).json({ error: 'Request payload is too large.' });
+      return;
+    }
+    if (errObj?.type === 'entity.parse.failed' || errObj?.status === 400) {
+      res.status(400).json({ error: 'Invalid request payload.' });
+      return;
+    }
+    if (req.path.startsWith('/api/')) {
+      res.status(500).json({ error: 'Something went wrong. Please try again.' });
+      return;
+    }
+    res.status(500).type('text/plain').send('Something went wrong.');
+  });
+
+  app.listen(envConfig.port, '0.0.0.0', () => {
+    console.log(`Samajh server running on http://0.0.0.0:${envConfig.port}`);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  const msg = err instanceof Error ? err.message : 'Server failed to start.';
+  console.error(msg);
+  process.exit(1);
+});
