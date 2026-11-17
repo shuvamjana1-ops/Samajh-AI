@@ -1,0 +1,142 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile created upon Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name from Google profile.",
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google email address.",
+          "maxLength": 254
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Optional Google avatar URL.",
+          "maxLength": 500
+        },
+        "preferredLanguage": {
+          "type": "string",
+          "enum": ["en", "hi"],
+          "description": "Preferred UI and explanation language."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when account was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when account was last updated."
+        }
+      },
+      "required": ["uid", "displayName", "email", "preferredLanguage", "createdAt", "updatedAt"]
+    },
+    "SavedAnalysis": {
+      "title": "SavedAnalysis",
+      "description": "Plain-language document summary saved to a signed-in user's account (never stores raw images or PDFs).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Analysis document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner UID matching parent user document.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["en", "hi"],
+          "description": "Language of the saved explanation."
+        },
+        "type": {
+          "type": "string",
+          "description": "Short document category label.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "description": "Plain-language summary text.",
+          "minLength": 1,
+          "maxLength": 1600
+        },
+        "deadlines": {
+          "type": "array",
+          "description": "Up to 20 extracted deadline items."
+        },
+        "money": {
+          "type": "array",
+          "description": "Up to 20 extracted money/fee items."
+        },
+        "risks": {
+          "type": "array",
+          "description": "Up to 20 extracted risky clauses."
+        },
+        "steps": {
+          "type": "array",
+          "description": "Up to 20 ordered action steps."
+        },
+        "completedSteps": {
+          "type": "array",
+          "description": "Up to 20 completed step indices."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "language",
+        "type",
+        "summary",
+        "deadlines",
+        "money",
+        "risks",
+        "steps",
+        "completedSteps",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile document with PII isolation."
+    },
+    "/users/{userId}/analyses/{analysisId}": {
+      "schema": { "$ref": "#/entities/SavedAnalysis" },
+      "description": "Owner-only saved plain-language document summaries."
+    }
+  }
+}

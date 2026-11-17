@@ -1,0 +1,6 @@
+{
+  "name": "Samajh",
+  "description": "Voice-first paperwork assistant that explains official documents in plain English or Hindi.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
