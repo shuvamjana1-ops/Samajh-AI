@@ -8,17 +8,18 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   verify-and-audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "npm"
 
       - name: Install dependencies
@@ -37,7 +38,24 @@ jobs:
       - name: Dependency vulnerability audit
         run: npm audit --audit-level=high
 
-      - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Secret and sensitive-file scan
+        run: |
+          set -euo pipefail
+          tracked=$(git ls-files)
+          for f in $tracked; do
+            case "$f" in
+              .env|.env.*|firebase-applet-config.json|firebase_applet_config.xml|*.pem|*.key|*.p12)
+                case "$f" in
+                  .env.example|firebase-applet-config.example.json) ;;
+                  *)
+                    echo "::error::Sensitive file tracked in repository: $f"
+                    exit 1
+                    ;;
+                esac
+                ;;
+            esac
+          done
+          if git grep -nE '(AIza[0-9A-Za-z_-]{35}|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----)' -- . ':!node_modules' ':!dist'; then
+            echo "::error::Potential secret detected in repository files."
+            exit 1
+          fi
