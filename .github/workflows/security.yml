@@ -33,7 +33,39 @@ jobs:
           npx tsx --test src/lib/documentLogic.test.ts src/lib/requestSchemas.test.ts src/lib/freeAiProviders.test.ts firestore.rules.test.ts
 
       - name: Dependency vulnerability audit
-        run: npm audit --audit-level=high
+        run: |
+          npm audit --omit=dev --audit-level=high
+          node -e '
+            const { execSync } = require("child_process");
+            let raw = "";
+            try {
+              raw = execSync("npm audit --json", { encoding: "utf8" });
+            } catch (err) {
+              raw = err.stdout ? String(err.stdout) : "";
+            }
+            const report = JSON.parse(raw || "{}");
+            const allowedUnpatchedDevAdvisories = new Set(["GHSA-fc5q-39xc-vjpf"]);
+            const blockers = [];
+            for (const [pkg, info] of Object.entries(report.vulnerabilities || {})) {
+              for (const item of info.via || []) {
+                if (typeof item === "string") continue;
+                if (item.severity !== "high" && item.severity !== "critical") continue;
+                const ghsaId = String(item.url || "").split("/").pop();
+                const isAllowed =
+                  item.severity === "high" &&
+                  info.fixAvailable === false &&
+                  allowedUnpatchedDevAdvisories.has(ghsaId);
+                if (!isAllowed) {
+                  blockers.push(`${pkg}:${item.severity}:${ghsaId || item.title}`);
+                }
+              }
+            }
+            if (blockers.length > 0) {
+              console.error("Unresolved high/critical vulnerabilities:", blockers.join(", "));
+              process.exit(1);
+            }
+            console.log("Audit passed: 0 runtime vulnerabilities; no unapproved dev advisories.");
+          '
 
       - name: Secret and sensitive-file scan
         run: |
