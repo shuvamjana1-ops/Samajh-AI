@@ -496,11 +496,8 @@ function parseCliServerArgs(argv: string[]): { port?: number; host?: string } {
   return { port, host };
 }
 
-async function startServer() {
-  const cliArgs = parseCliServerArgs(process.argv.slice(2));
+export async function createApp(): Promise<express.Express> {
   const envConfig = validateEnvConfig(process.env, IS_PROD);
-  const listenPort = cliArgs.port ?? envConfig.port;
-  const listenHost = cliArgs.host ?? (process.env.HOST?.trim() || '0.0.0.0');
   if (!envConfig.anyAiConfigured) {
     console.warn(
       'Notice: No AI provider key configured (GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or OLLAMA_BASE_URL); live scanning requires a configured server provider.'
@@ -854,7 +851,9 @@ Instructions:
       host.includes('127.0.0.1') ||
       host.includes('.run.app') ||
       host.includes('ais-dev-') ||
-      host.includes('ais-pre-')
+      host.includes('ais-pre-') ||
+      process.env.VERCEL_ENV === 'preview' ||
+      (host.endsWith('.vercel.app') && process.env.VERCEL_ENV !== 'production')
     ) {
       return true;
     }
@@ -867,14 +866,7 @@ Instructions:
       return `<a href="${item.path}" class="nav-link">${escapeHtml(item.navLabel)}</a>`;
     }).join('');
 
-    const footerLinks = [
-      '/services',
-      '/about',
-      '/faq',
-      '/contact',
-      '/privacy-policy',
-      '/terms',
-    ]
+    const footerLinks = ['/compress', '/privacy-policy', '/terms']
       .map((r) => {
         const item = SITE_PAGES[r as AppRoute];
         return `<a href="${item.path}" class="footer-link">${escapeHtml(item.navLabel)}</a>`;
@@ -1062,8 +1054,9 @@ Instructions:
     return true;
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
+  if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
+    const viteModuleName = 'vite';
+    const { createServer: createViteServer } = await import(/* @vite-ignore */ viteModuleName);
     const disableHmr = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
       server: {
@@ -1132,6 +1125,16 @@ Instructions:
     res.status(500).type('text/plain').send('Something went wrong.');
   });
 
+  return app;
+}
+
+async function startServer() {
+  const cliArgs = parseCliServerArgs(process.argv.slice(2));
+  const envConfig = validateEnvConfig(process.env, IS_PROD);
+  const listenPort = cliArgs.port ?? envConfig.port;
+  const listenHost = cliArgs.host ?? (process.env.HOST?.trim() || '0.0.0.0');
+  const app = await createApp();
+
   const httpServer = app.listen(listenPort, listenHost, () => {
     console.log(`Samajh server running on http://${listenHost}:${listenPort}`);
   });
@@ -1145,8 +1148,17 @@ Instructions:
   });
 }
 
-startServer().catch((err) => {
-  const msg = err instanceof Error ? err.message : 'Server failed to start.';
-  console.error(msg);
-  process.exit(1);
-});
+const isMainEntry =
+  process.env.VERCEL !== '1' &&
+  typeof process.argv[1] === 'string' &&
+  (path.resolve(process.argv[1]) === __filename ||
+    path.resolve(process.argv[1]).endsWith(`${path.sep}server.ts`) ||
+    path.resolve(process.argv[1]).endsWith(`${path.sep}server.js`));
+
+if (isMainEntry) {
+  startServer().catch((err) => {
+    const msg = err instanceof Error ? err.message : 'Server failed to start.';
+    console.error(msg);
+    process.exit(1);
+  });
+}

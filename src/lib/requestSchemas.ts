@@ -136,7 +136,8 @@ export function validateEnvConfig(
 
   const anyAiConfigured =
     geminiConfigured || groqConfigured || openrouterConfigured || Boolean(ollamaBaseUrl);
-  if (isProd && !anyAiConfigured) {
+  const isVercelServerless = env.VERCEL === '1';
+  if (isProd && !anyAiConfigured && !isVercelServerless) {
     throw new Error('Server configuration error: missing required environment variables.');
   }
 
@@ -585,6 +586,8 @@ const SENSITIVE_EXACT_PATHS = new Set([
   '/server.ts',
   '/metadata.json',
   '/security_spec.md',
+  '/security.md',
+  '/vercel.json',
   '/readme.md',
 ]);
 

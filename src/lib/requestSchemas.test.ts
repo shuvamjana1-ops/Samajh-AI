@@ -31,6 +31,9 @@ test('validateEnvConfig validates ports, URLs, and production GEMINI_API_KEY', (
   assert.throws(() => validateEnvConfig({ APP_URL: 'javascript:alert(1)' }, false));
   assert.throws(() => validateEnvConfig({}, true));
 
+  const vercelUnconfigured = validateEnvConfig({ VERCEL: '1' }, true);
+  assert.equal(vercelUnconfigured.anyAiConfigured, false);
+
   const prodResult = validateEnvConfig(
     {
       GEMINI_API_KEY: 'configured-key',
@@ -203,5 +206,7 @@ test('isBlockedSensitivePath blocks firebase config, /@fs/ workspace reads, dotf
   assert.equal(isBlockedSensitivePath('/@fs/app/applet/node_modules/vite/dist/client/client.mjs', false), false);
   assert.equal(isBlockedSensitivePath('/src/App.tsx', false), false);
   assert.equal(isBlockedSensitivePath('/src/App.tsx', true), true);
+  assert.equal(isBlockedSensitivePath('/vercel.json', true), true);
+  assert.equal(isBlockedSensitivePath('/api/index.ts', true), true);
 });
 

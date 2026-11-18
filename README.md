@@ -2,15 +2,17 @@
 
 # Samajh
 
-**Paperwork, explained.**
+**Contracts, explained.**
 
-Plain English and Hindi (`हिन्दी`) explanations for rental agreements, loan papers, and official notices.
+Upload any contract or official paper in **English** or **Hindi (`हिन्दी`)** to get a plain-language explanation and ask grounded questions about the document.
 
+**[Live App: https://samajh-paperwork.vercel.app](https://samajh-paperwork.vercel.app)**
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-samajh--paperwork.vercel.app-D9B97A?style=flat-square&logo=vercel&logoColor=081A22)](https://samajh-paperwork.vercel.app)
 ![React 19](https://img.shields.io/badge/React-19-081A22?style=flat-square&logo=react&logoColor=7FD1C4)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-081A22?style=flat-square&logo=typescript&logoColor=D9B97A)
 ![Vite 8](https://img.shields.io/badge/Vite-8-081A22?style=flat-square&logo=vite&logoColor=D9B97A)
 ![Express](https://img.shields.io/badge/Express-4-081A22?style=flat-square&logo=express&logoColor=EAF4F2)
-![Firebase](https://img.shields.io/badge/Firebase-Auth%20%26%20Firestore-081A22?style=flat-square&logo=firebase&logoColor=D9B97A)
 
 </div>
 
@@ -37,8 +39,8 @@ Built with an International Typographic (Swiss) layout system, server-rendered H
 * **Strict Input Schemas**: Every JSON payload is validated in `src/lib/requestSchemas.ts` with unknown-key rejection, field-length caps, and route-specific body limits.
 * **Rate Limiting & CORS**: Per-IP sliding-window limiters return `429` with `Retry-After` headers alongside an exact-origin CORS allowlist on `/api/*`.
 * **HTTP Hardening**: Enforces Content Security Policy, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, production `HSTS` and `X-Frame-Options: DENY`, and `404` blocking on dotfiles, configs, and source files.
-* **Firebase Isolation**: Google Sign-In and optional saved scan summaries use `firestore.rules` with `email_verified` owner enforcement and field-level schema bounds matching `firebase-blueprint.json`.
-* **SEO & SSR Routes**: Dedicated routes (`/`, `/services`, `/about`, `/faq`, `/contact`, `/privacy-policy`, `/terms`, `/sign-in`, `/saved`) render real HTML on initial request with canonical URLs, JSON-LD structured data, `/robots.txt`, and `/sitemap.xml`.
+* **Firebase Isolation**: Optional Firebase configuration uses environment variables (`VITE_FIREBASE_*`) and strict `firestore.rules` matching `firebase-blueprint.json`.
+* **Routes & Compression Tool**: Focused app routes (`/`, `/compress`, `/privacy-policy`, `/terms`) with canonical URLs, JSON-LD structured data, `/robots.txt`, `/sitemap.xml`, and a browser-side exact-size document compressor (`/compress`).
 
 ## Tech Stack
 
@@ -120,11 +122,19 @@ Optional local Git pre-commit secret check hook:
 git config core.hooksPath .githooks
 ```
 
+### 5. Deploy to Vercel
+
+Live URL: **[https://samajh-paperwork.vercel.app](https://samajh-paperwork.vercel.app)**
+
+This repository includes `vercel.json` and `api/index.ts` for zero-config Vercel deployment (`npm run build` → `dist/`, plus Express serverless `/api/*` routing). Add `GEMINI_API_KEY` (and optional fallback keys `GROQ_API_KEY` / `OPENROUTER_API_KEY`) in Vercel **Project Settings → Environment Variables**.
+
 ## Project Structure
 
 ```text
 .
-├── server.ts                       # Express server, SSR HTML renderer, security middleware, Gemini routes
+├── api/index.ts                    # Vercel Serverless Function entry point
+├── vercel.json                     # Vercel build, security headers, and SPA/API rewrites
+├── server.ts                       # Express server, SSR HTML renderer, security middleware, AI routes
 ├── index.html                      # HTML entry shell
 ├── firestore.rules                 # Cloud Firestore security rules
 ├── firebase-blueprint.json         # Firestore schema blueprint
@@ -136,9 +146,9 @@ git config core.hooksPath .githooks
 └── src/
     ├── App.tsx                     # Main application routing and document state
     ├── index.css                   # Swiss 12-column grid and typography tokens
-    ├── components/                 # Modular views (HeroLanding, CapturePreview, ResultWorkspace, InfoPages, AuthPage, SavedScansPage)
+    ├── components/                 # Modular views (HeroLanding, CapturePreview, ResultWorkspace, DocCompressorPage, InfoPages, AppPreloader)
     ├── data/                       # Bilingual sample agreement and page metadata/copy
-    ├── lib/                        # Pure validation, request schemas, Firebase client, UTM helpers
+    ├── lib/                        # Pure validation, compression, highlighting, request schemas, Firebase client
     └── types/                      # Shared TypeScript interfaces
 ```
 
