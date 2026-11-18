@@ -2,6 +2,7 @@ import { Check, Copy, Send } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { FAQ_ENTRIES, SITE_PAGES, type AppRoute } from '../data/sitePages';
 import { getStoredUtm } from '../lib/utm';
+import { ScrambleText } from './ScrambleText';
 
 interface InfoPageProps {
   route: AppRoute | null;
@@ -28,7 +29,7 @@ export function InfoPage({ route, onNavigate }: InfoPageProps) {
     return (
       <section className="glass-card auth-card" aria-labelledby="not-found-title">
         <h1 id="not-found-title" className="section-heading">
-          Page not found
+          <ScrambleText text="Page not found" highlightWords={['not found']} durationMs={520} />
         </h1>
         <p className="body-text">
           The page you requested does not exist. Return to Samajh home to scan a document or read our guides.
@@ -116,7 +117,11 @@ export function InfoPage({ route, onNavigate }: InfoPageProps) {
     <div className="info-page-stack">
       <section className="glass-card" aria-labelledby="page-h1">
         <h1 id="page-h1" className="hero-headline">
-          {page.h1}
+          <ScrambleText
+            text={page.h1}
+            highlightWords={page.h1Highlights}
+            durationMs={680}
+          />
         </h1>
         <p className="body-lead">{page.lead}</p>
         {page.lastUpdated && (
@@ -142,7 +147,7 @@ export function InfoPage({ route, onNavigate }: InfoPageProps) {
       {route === '/faq' ? (
         <section className="glass-card" aria-label="FAQ list">
           <h2 className="section-heading" style={{ marginBottom: '2.5%' }}>
-            Common questions
+            <ScrambleText text="Common questions" durationMs={500} />
           </h2>
           <div className="faq-list">
             {FAQ_ENTRIES.map((entry) => (
@@ -167,7 +172,7 @@ export function InfoPage({ route, onNavigate }: InfoPageProps) {
       {route === '/contact' && (
         <section className="glass-card" aria-labelledby="contact-form-heading">
           <h2 id="contact-form-heading" className="section-heading">
-            Send a message
+            <ScrambleText text="Send a message" durationMs={500} />
           </h2>
 
           <form className="contact-form" onSubmit={handleContactSubmit} noValidate>

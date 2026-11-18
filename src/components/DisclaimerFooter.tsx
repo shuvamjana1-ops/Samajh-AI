@@ -11,10 +11,10 @@ const FOOTER_ROUTES: AppRoute[] = [
   '/privacy-policy',
   '/terms',
   '/services',
+  '/compress',
   '/about',
   '/faq',
   '/contact',
-  '/sign-in',
 ];
 
 export function DisclaimerFooter({ language, onNavigate }: DisclaimerFooterProps) {

@@ -11,6 +11,7 @@ import {
   type PreviewZoomLevel,
 } from '../lib/documentLogic';
 import type { Language, UploadedPage } from '../types/document';
+import { ScrambleText } from './ScrambleText';
 
 interface CapturePreviewProps {
   language: Language;
@@ -84,7 +85,11 @@ export function CapturePreview({
     <section className="glass-card preview-wrap" aria-live="polite">
       <div>
         <h1 className="section-heading">
-          {isAnalyzing ? copy.analyzingTitle : copy.previewHeading}
+          <ScrambleText
+            text={isAnalyzing ? copy.analyzingTitle : copy.previewHeading}
+            highlightWords={isAnalyzing ? undefined : copy.previewHeadingHighlights}
+            durationMs={540}
+          />
         </h1>
         <p className="body-text">
           {isAnalyzing ? copy.analyzingSubtitle : copy.previewSubtitle}

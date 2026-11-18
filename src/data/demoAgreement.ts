@@ -174,13 +174,17 @@ export const DEMO_ANALYSES: Record<Language, DocumentAnalysis> = {
 export interface UiCopy {
   brand: string;
   heroTitle: string;
+  heroTitleHighlights: string[];
   heroSubtitle: string;
+  heroSubtitleHighlights: string[];
   scanButton: string;
   sampleButton: string;
   fileHint: string;
+  fileHintHighlights: string[];
   whatChecksHeading: string;
   checksList: Array<{ title: string; detail: string }>;
   previewHeading: string;
+  previewHeadingHighlights: string[];
   previewSubtitle: string;
   analyzeButton: string;
   retakeButton: string;
@@ -190,6 +194,7 @@ export interface UiCopy {
   translatingNotice: string;
   newScan: string;
   summaryHeading: string;
+  summaryHeadingHighlights: string[];
   listenPlay: string;
   listenStop: string;
   listenUnsupported: string;
@@ -239,6 +244,7 @@ export interface UiCopy {
   savedToAccount: string;
   signInToSave: string;
   authTitle: string;
+  authTitleHighlights: string[];
   authSubtitle: string;
   authPoints: string[];
   authGoogleButton: string;
@@ -246,6 +252,7 @@ export interface UiCopy {
   authContinueGuest: string;
   authFreeTierNote: string;
   savedTitle: string;
+  savedTitleHighlights: string[];
   savedSubtitle: string;
   savedEmpty: string;
   savedOpen: string;
@@ -258,11 +265,14 @@ export const UI_COPY: Record<Language, UiCopy> = {
   en: {
     brand: 'Samajh',
     heroTitle: 'Paperwork, explained.',
+    heroTitleHighlights: ['explained.'],
     heroSubtitle:
       'Plain English and Hindi explanations for rental agreements, loan papers, and official notices.',
+    heroSubtitleHighlights: ['Plain English and Hindi'],
     scanButton: 'Scan a document',
     sampleButton: 'Open sample agreement',
     fileHint: 'Photograph or upload a JPG, PNG, or PDF up to 8 MB and 5 pages. Raw files are never stored.',
+    fileHintHighlights: ['8 MB and 5 pages', 'never stored'],
     whatChecksHeading: 'Scan',
     checksList: [
       {
@@ -279,6 +289,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
       },
     ],
     previewHeading: 'Check your document before reading',
+    previewHeadingHighlights: ['reading'],
     previewSubtitle: 'Make sure the text looks sharp and well lit. You can add up to 5 pages.',
     analyzeButton: 'Explain this document',
     retakeButton: 'Choose another file',
@@ -288,6 +299,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     translatingNotice: 'Translating explanation…',
     newScan: 'New scan',
     summaryHeading: 'Plain-language summary',
+    summaryHeadingHighlights: ['Plain-language'],
     listenPlay: 'Listen',
     listenStop: 'Stop reading',
     listenUnsupported: 'Voice playback is not available in this browser, so please read the summary above.',
@@ -322,7 +334,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     citedLabel: 'Based on',
     emptyItems: 'None found in this document.',
     disclaimer: "Samajh explains documents. It isn't legal advice.",
-    sessionNote: 'Images are never stored. Sign in to save plain-text summaries.',
+    sessionNote: 'Images are processed in memory and never stored.',
     sampleBadge: 'Sample rental agreement',
     themeDark: 'Dark theme',
     themeLight: 'Light theme',
@@ -341,6 +353,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     savedToAccount: 'Saved to account',
     signInToSave: 'Sign in to save',
     authTitle: 'Sign in to save your plain-language summaries',
+    authTitleHighlights: ['plain-language summaries'],
     authSubtitle:
       'Keep your document explanations, deadlines, and action checklists synced securely in your private cloud library.',
     authPoints: [
@@ -353,6 +366,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     authContinueGuest: 'Continue without signing in',
     authFreeTierNote: 'Free-tier Firebase Auth & Cloud Firestore · Delete your data anytime',
     savedTitle: 'Saved document summaries',
+    savedTitleHighlights: ['Saved'],
     savedSubtitle: 'Only you can view or delete these plain-text explanations.',
     savedEmpty: 'No saved summaries yet. Scan a paper or open a sample, then tap Save summary.',
     savedOpen: 'Open summary',
@@ -363,11 +377,14 @@ export const UI_COPY: Record<Language, UiCopy> = {
   hi: {
     brand: 'Samajh',
     heroTitle: 'कागज़ात, आसान भाषा में।',
+    heroTitleHighlights: ['आसान भाषा में।'],
     heroSubtitle:
       'किराया समझौते, लोन के कागज़ और सरकारी नोटिस को सरल हिन्दी और अंग्रेज़ी में समझें।',
+    heroSubtitleHighlights: ['सरल हिन्दी और अंग्रेज़ी'],
     scanButton: 'दस्तावेज़ स्कैन करें',
     sampleButton: 'नमूना समझौता खोलें',
     fileHint: 'JPG, PNG या PDF फोटो अपलोड करें (8 MB और 5 पेज तक)। मूल फ़ाइलें कभी सेव नहीं होतीं।',
+    fileHintHighlights: ['8 MB और 5 पेज तक', 'कभी सेव नहीं होतीं'],
     whatChecksHeading: 'स्कैन करें',
     checksList: [
       {
@@ -384,6 +401,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
       },
     ],
     previewHeading: 'पढ़ने से पहले फोटो जांच लें',
+    previewHeadingHighlights: ['फोटो जांच लें'],
     previewSubtitle: 'सुनिश्चित करें कि अक्षर साफ दिख रहे हैं। आप 5 पेज तक जोड़ सकते हैं।',
     analyzeButton: 'इस दस्तावेज़ को समझाएं',
     retakeButton: 'दूसरी फ़ाइल चुनें',
@@ -393,6 +411,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     translatingNotice: 'अनुवाद किया जा रहा है…',
     newScan: 'नया स्कैन',
     summaryHeading: 'आसान भाषा में सारांश',
+    summaryHeadingHighlights: ['आसान भाषा'],
     listenPlay: 'सुनें',
     listenStop: 'पढ़ना रोकें',
     listenUnsupported: 'इस ब्राउज़र में आवाज़ की सुविधा उपलब्ध नहीं है, कृपया ऊपर लिखा सारांश पढ़ें।',
@@ -427,7 +446,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     citedLabel: 'आधार',
     emptyItems: 'इस दस्तावेज़ में ऐसी कोई जानकारी नहीं मिली।',
     disclaimer: 'Samajh केवल दस्तावेज़ समझाता है। यह कानूनी सलाह नहीं है।',
-    sessionNote: 'तस्वीरें सेव नहीं होतीं। साइन इन करने पर सारांश सेव कर सकते हैं।',
+    sessionNote: 'तस्वीरें केवल अस्थायी रूप से पढ़ी जाती हैं और कभी सेव नहीं होतीं।',
     sampleBadge: 'नमूना किराया समझौता',
     themeDark: 'डार्क थीम',
     themeLight: 'लाइट थीम',
@@ -446,6 +465,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     savedToAccount: 'अकाउंट में सेव है',
     signInToSave: 'सेव करने के लिए साइन इन करें',
     authTitle: 'आसान भाषा के सारांश सेव करने के लिए साइन इन करें',
+    authTitleHighlights: ['आसान भाषा के सारांश'],
     authSubtitle:
       'अपने दस्तावेज़ के मुख्य बिंदु, तारीखें और अगले कदमों की सूची अपने निजी क्लाउड अकाउंट में सुरक्षित रखें।',
     authPoints: [
@@ -458,6 +478,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
     authContinueGuest: 'बिना साइन इन किए जारी रखें',
     authFreeTierNote: 'निःशुल्क Firebase Auth और Cloud Firestore · कभी भी डेटा हटाएं',
     savedTitle: 'सेव किए गए सारांश',
+    savedTitleHighlights: ['सेव किए गए'],
     savedSubtitle: 'केवल आप ही इन सेव किए गए सारांशों को देख या हटा सकते हैं।',
     savedEmpty: 'अभी कोई सारांश सेव नहीं है। कोई कागज़ स्कैन करें और सारांश सेव करें दबाएं।',
     savedOpen: 'सारांश खोलें',

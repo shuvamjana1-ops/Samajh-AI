@@ -511,8 +511,43 @@ const ASK_SCHEMA = {
   required: ['answer', 'citedClause', 'notInDocument'],
 };
 
+function parseCliServerArgs(argv: string[]): { port?: number; host?: string } {
+  let port: number | undefined;
+  let host: string | undefined;
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--port' && i + 1 < argv.length) {
+      const raw = argv[i + 1].trim();
+      const parsed = Number(raw);
+      if (/^\d+$/.test(raw) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
+        port = parsed;
+      }
+      i += 1;
+    } else if (arg.startsWith('--port=')) {
+      const raw = arg.slice('--port='.length).trim();
+      const parsed = Number(raw);
+      if (/^\d+$/.test(raw) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
+        port = parsed;
+      }
+    } else if (arg === '--host' && i + 1 < argv.length) {
+      const rawHost = argv[i + 1].trim();
+      if (rawHost) host = rawHost;
+      i += 1;
+    } else if (arg.startsWith('--host=')) {
+      const rawHost = arg.slice('--host='.length).trim();
+      if (rawHost) host = rawHost;
+    }
+  }
+
+  return { port, host };
+}
+
 async function startServer() {
+  const cliArgs = parseCliServerArgs(process.argv.slice(2));
   const envConfig = validateEnvConfig(process.env, IS_PROD);
+  const listenPort = cliArgs.port ?? envConfig.port;
+  const listenHost = cliArgs.host ?? (process.env.HOST?.trim() || '0.0.0.0');
   if (!envConfig.anyAiConfigured) {
     console.warn(
       'Notice: No AI provider key configured (GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or OLLAMA_BASE_URL); live scanning requires a configured server provider.'
@@ -1078,8 +1113,12 @@ Instructions:
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
+    const disableHmr = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ...(disableHmr ? { hmr: false, ws: false, watch: null } : {}),
+      },
       appType: 'spa',
     });
 
@@ -1142,8 +1181,16 @@ Instructions:
     res.status(500).type('text/plain').send('Something went wrong.');
   });
 
-  app.listen(envConfig.port, '0.0.0.0', () => {
-    console.log(`Samajh server running on http://0.0.0.0:${envConfig.port}`);
+  const httpServer = app.listen(listenPort, listenHost, () => {
+    console.log(`Samajh server running on http://${listenHost}:${listenPort}`);
+  });
+  httpServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${listenPort} is already in use on ${listenHost}.`);
+    } else {
+      console.error(err.message || 'Server failed to listen.');
+    }
+    process.exit(1);
   });
 }
 

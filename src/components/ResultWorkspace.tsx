@@ -1,6 +1,4 @@
 import {
-  Bookmark,
-  BookmarkCheck,
   Check,
   CheckSquare,
   ChevronLeft,
@@ -17,6 +15,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { UI_COPY } from '../data/demoAgreement';
 import { buildSpeechScript, formatPreviewAltText, LANGUAGE_CONFIG } from '../lib/documentLogic';
+import { HighlightedText } from './HighlightedText';
+import { ScrambleText } from './ScrambleText';
 import type {
   DocumentAnalysis,
   Language,
@@ -36,12 +36,7 @@ interface ResultWorkspaceProps {
   isAsking: boolean;
   askError: string | null;
   onAskQuestion: (question: string) => void;
-  isSignedIn: boolean;
-  isSaved: boolean;
-  isSaving: boolean;
-  saveError: string | null;
   initialCompletedSteps?: number[];
-  onSaveAnalysis: (completedSteps: number[]) => void;
   onStepsChange: (completedSteps: number[]) => void;
 }
 
@@ -78,12 +73,7 @@ export function ResultWorkspace({
   isAsking,
   askError,
   onAskQuestion,
-  isSignedIn,
-  isSaved,
-  isSaving,
-  saveError,
   initialCompletedSteps = [],
-  onSaveAnalysis,
   onStepsChange,
 }: ResultWorkspaceProps) {
   const copy = UI_COPY[language];
@@ -330,7 +320,11 @@ export function ResultWorkspace({
                 {isDemo ? ` · ${copy.sampleBadge}` : ''}
               </div>
               <h1 id="summary-title" className="section-heading">
-                {copy.summaryHeading}
+                <ScrambleText
+                  text={copy.summaryHeading}
+                  highlightWords={copy.summaryHeadingHighlights}
+                  durationMs={560}
+                />
               </h1>
             </div>
 
@@ -353,38 +347,12 @@ export function ResultWorkspace({
                 )}
                 <span>{isSpeaking ? copy.listenStop : copy.listenPlay}</span>
               </button>
-
-              <button
-                type="button"
-                className={isSaved ? 'btn-ghost' : 'btn-secondary'}
-                disabled={isSaving}
-                onClick={() => onSaveAnalysis(getCompletedIndices(checkedSteps))}
-              >
-                {isSaved ? (
-                  <BookmarkCheck size={16} aria-hidden="true" />
-                ) : (
-                  <Bookmark size={16} aria-hidden="true" />
-                )}
-                <span>
-                  {isSaving
-                    ? copy.savingToAccount
-                    : isSaved
-                      ? copy.savedToAccount
-                      : isSignedIn
-                        ? copy.saveToAccount
-                        : copy.signInToSave}
-                </span>
-              </button>
             </div>
           </div>
 
-          <p className="body-lead">{analysis.summary}</p>
-
-          {saveError && (
-            <div className="error-card" role="alert" style={{ marginTop: '3%' }}>
-              <p className="body-text">{saveError}</p>
-            </div>
-          )}
+          <p className="body-lead">
+            <HighlightedText text={analysis.summary} autoDetectDocumentTerms />
+          </p>
 
           {speechNotice && (
             <p className="listen-notice" role="status">
@@ -480,7 +448,9 @@ export function ResultWorkspace({
               {qaMessages.map((msg) => (
                 <div key={msg.id} className="qa-item">
                   <p className="qa-question">{msg.question}</p>
-                  <p className="qa-answer">{msg.answer}</p>
+                  <p className="qa-answer">
+                    <HighlightedText text={msg.answer} autoDetectDocumentTerms />
+                  </p>
                   {msg.notInDocument ? (
                     <span className="qa-missing">{copy.notInDocumentBadge}</span>
                   ) : msg.citedClause ? (
@@ -595,7 +565,11 @@ export function ResultWorkspace({
                         <span className="item-primary">{item.what}</span>
                         <span className="item-when tabular-nums">{item.when}</span>
                       </div>
-                      {item.note && <p className="body-text">{item.note}</p>}
+                      {item.note && (
+                        <p className="body-text">
+                          <HighlightedText text={item.note} autoDetectDocumentTerms />
+                        </p>
+                      )}
                     </div>
                   ))
                 )}
@@ -613,7 +587,11 @@ export function ResultWorkspace({
                         <span className="item-primary">{item.label}</span>
                         <span className="item-highlight tabular-nums">{item.amount}</span>
                       </div>
-                      {item.note && <p className="body-text">{item.note}</p>}
+                      {item.note && (
+                        <p className="body-text">
+                          <HighlightedText text={item.note} autoDetectDocumentTerms />
+                        </p>
+                      )}
                     </div>
                   ))
                 )}
@@ -634,7 +612,9 @@ export function ResultWorkspace({
                         <span aria-hidden="true" className="clause-ref">·</span>
                         <span className="clause-ref">{risk.clause}</span>
                       </div>
-                      <p className="body-text">{risk.text}</p>
+                      <p className="body-text">
+                        <HighlightedText text={risk.text} autoDetectDocumentTerms />
+                      </p>
                     </div>
                   ))
                 )}
@@ -686,7 +666,9 @@ export function ResultWorkspace({
                             }}
                           />
                           <span className="step-num tabular-nums">{idx + 1}.</span>
-                          <span className="step-text body-text">{step}</span>
+                          <span className="step-text body-text">
+                            <HighlightedText text={step} autoDetectDocumentTerms />
+                          </span>
                         </button>
                       );
                     })

@@ -1,13 +1,12 @@
 export type AppRoute =
   | '/'
   | '/services'
+  | '/compress'
   | '/about'
   | '/contact'
   | '/faq'
   | '/privacy-policy'
-  | '/terms'
-  | '/sign-in'
-  | '/saved';
+  | '/terms';
 
 export interface FaqEntry {
   question: string;
@@ -20,6 +19,7 @@ export interface SitePageMeta {
   title: string;
   description: string;
   h1: string;
+  h1Highlights?: string[];
   lead: string;
   lastUpdated?: string;
   indexable: boolean;
@@ -38,7 +38,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
   {
     question: 'Are my uploaded photos or PDFs stored on a server?',
     answer:
-      'No. Images and PDFs are processed in memory only. If you sign in with Google and choose Save summary, only plain-text summaries are stored.',
+      'No. Images and PDFs are processed transiently in memory only and discarded immediately after your explanation is generated.',
   },
   {
     question: 'Which languages are supported?',
@@ -51,9 +51,9 @@ export const FAQ_ENTRIES: FaqEntry[] = [
       'No. Samajh translates dense wording into plain language so you can prepare informed questions for a qualified professional.',
   },
   {
-    question: 'How do I delete my saved summaries?',
+    question: 'How do I shrink a file that is larger than 8 MB?',
     answer:
-      'Open Saved scans from the header while signed in and use the Delete action on any summary to remove it immediately.',
+      'Open Compress from the header to shrink any JPG, PNG, or scanned PDF locally in your browser to the exact KB or MB size required.',
   },
 ];
 
@@ -65,6 +65,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Understand rental agreements, loan papers, notices, and reports in plain English or Hindi with spoken audio and risk flags.',
     h1: 'Paperwork, explained.',
+    h1Highlights: ['explained.'],
     lead: 'Plain English and Hindi explanations for rental agreements, loan papers, and official notices.',
     indexable: true,
     sections: [
@@ -89,6 +90,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Explore how Samajh extracts deadlines, fees, risky clauses, voice playback, and follow-up answers from official documents.',
     h1: 'Plain-language document checks in one place.',
+    h1Highlights: ['Plain-language', 'in one place.'],
     lead: 'Upload up to five pages in JPG, PNG, or PDF format to extract structured dates, fees, risks, and action checklists.',
     indexable: true,
     sections: [
@@ -106,6 +108,18 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
       },
     ],
   },
+  '/compress': {
+    path: '/compress',
+    navLabel: 'Compress',
+    title: 'Exact-Size Document Compressor | Samajh',
+    description:
+      'Compress JPG, PNG, or scanned PDF documents locally in your browser to the exact byte or KB/MB target size required for upload.',
+    h1: 'Compress documents to the exact required size.',
+    h1Highlights: ['exact required size.'],
+    lead: 'Shrink oversized JPG, PNG, or scanned PDFs right in your browser to match any required input size limit—including Samajh 8 MB.',
+    indexable: true,
+    sections: [],
+  },
   '/about': {
     path: '/about',
     navLabel: 'About',
@@ -113,6 +127,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Learn how Samajh helps readers review everyday agreements and notices clearly without storing raw document files.',
     h1: 'Built to make everyday paperwork readable.',
+    h1Highlights: ['readable.'],
     lead: 'Official agreements use dense legal and financial wording. Samajh turns confusing pages into clear facts before you sign.',
     indexable: true,
     sections: [
@@ -121,8 +136,8 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
         body: 'Raw images and PDFs are processed transiently in memory and discarded after your session.',
       },
       {
-        heading: 'Optional cloud library',
-        body: 'Sign in with Google only if you want to keep plain-text summaries and checklist progress across devices.',
+        heading: 'No account required',
+        body: 'Review documents, switch between English and Hindi, listen aloud, or compress files without creating an account.',
       },
       {
         heading: 'Honest boundaries',
@@ -137,6 +152,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Send questions, bug reports, or accessibility feedback to the Samajh team using our protected contact form.',
     h1: 'Contact Samajh.',
+    h1Highlights: ['Samajh.'],
     lead: 'Send a question or accessibility report below. Direct phone, email, and office address will appear once published by the owner.',
     indexable: true,
     sections: [
@@ -153,6 +169,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Answers on supported document formats, privacy, English and Hindi explanations, voice playback, and saved summaries.',
     h1: 'Frequently asked questions.',
+    h1Highlights: ['questions.'],
     lead: 'Clear answers about how Samajh reads documents, protects uploaded files, and handles saved accounts.',
     indexable: true,
     sections: FAQ_ENTRIES.map((item) => ({
@@ -167,6 +184,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Read how Samajh handles uploaded files, Google Sign-In profiles, saved plain-text summaries, and cookie consent choices.',
     h1: 'Privacy Policy',
+    h1Highlights: ['Privacy'],
     lead: 'Review with a lawyer before launch. This summary explains what data Samajh processes and stores.',
     lastUpdated: LEGAL_LAST_UPDATED,
     indexable: true,
@@ -176,8 +194,8 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
         body: 'Uploaded JPG, PNG, and PDF files are validated, stripped of image EXIF metadata, processed in memory, and never saved to disk or database.',
       },
       {
-        heading: 'Google Sign-In and saved summaries',
-        body: 'When you sign in with Google, your name, email, and saved plain-text summaries are stored in Cloud Firestore solely under your account UID.',
+        heading: 'No accounts or stored summaries',
+        body: 'Samajh does not require sign-in and does not keep a persistent server-side library of your uploaded documents or summaries.',
       },
       {
         heading: 'Cookies and local preferences',
@@ -192,6 +210,7 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
     description:
       'Review Samajh terms of use, acceptable document upload rules, and plain-language informational disclaimers.',
     h1: 'Terms and Conditions',
+    h1Highlights: ['Terms'],
     lead: 'Review with a lawyer before launch. By using Samajh, you agree to the informational terms below.',
     lastUpdated: LEGAL_LAST_UPDATED,
     indexable: true,
@@ -205,38 +224,17 @@ export const SITE_PAGES: Record<AppRoute, SitePageMeta> = {
         body: 'Only upload documents you are authorized to read, up to 8 MB per file and 5 pages per scan.',
       },
       {
-        heading: 'Account control',
-        body: 'You may delete saved summaries from your account at any time. Service availability is provided as is.',
+        heading: 'Service availability',
+        body: 'Document explanations and client-side compression tools are provided on an as-is informational basis.',
       },
     ],
-  },
-  '/sign-in': {
-    path: '/sign-in',
-    navLabel: 'Sign In',
-    title: 'Sign In | Samajh',
-    description:
-      'Sign in with Google to save plain-language document summaries and action checklists across sessions.',
-    h1: 'Sign in to save your plain-language summaries',
-    lead: 'Keep document explanations and action checklists synced in your private cloud library.',
-    indexable: false,
-    sections: [],
-  },
-  '/saved': {
-    path: '/saved',
-    navLabel: 'Saved Scans',
-    title: 'Saved Summaries | Samajh',
-    description:
-      'View, reopen, or delete plain-text document summaries saved to your Google account.',
-    h1: 'Saved document summaries',
-    lead: 'Only you can view or delete these plain-text explanations.',
-    indexable: false,
-    sections: [],
   },
 };
 
 export const INDEXABLE_ROUTES: AppRoute[] = [
   '/',
   '/services',
+  '/compress',
   '/about',
   '/contact',
   '/faq',
@@ -244,7 +242,7 @@ export const INDEXABLE_ROUTES: AppRoute[] = [
   '/terms',
 ];
 
-export const HEADER_NAV_ROUTES: AppRoute[] = ['/services', '/about', '/faq', '/contact'];
+export const HEADER_NAV_ROUTES: AppRoute[] = ['/services', '/compress', '/about', '/faq', '/contact'];
 
 export function isKnownRoute(pathname: string): pathname is AppRoute {
   return Object.prototype.hasOwnProperty.call(SITE_PAGES, pathname);

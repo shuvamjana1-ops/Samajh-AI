@@ -1,6 +1,5 @@
 import { Menu, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { User } from 'firebase/auth';
 import { UI_COPY } from '../data/demoAgreement';
 import { HEADER_NAV_ROUTES, SITE_PAGES, type AppRoute } from '../data/sitePages';
 import { LANGUAGE_CONFIG } from '../lib/documentLogic';
@@ -15,9 +14,6 @@ interface TopBarProps {
   showHeaderLang: boolean;
   onNavigate: (path: AppRoute) => void;
   onOpenSearch: () => void;
-  user: User | null;
-  savedCount: number;
-  onSignOut: () => void;
 }
 
 const LANGUAGES: Language[] = ['en', 'hi'];
@@ -31,9 +27,6 @@ export function TopBar({
   showHeaderLang,
   onNavigate,
   onOpenSearch,
-  user,
-  savedCount,
-  onSignOut,
 }: TopBarProps) {
   const copy = UI_COPY[language];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -199,15 +192,6 @@ export function TopBar({
                 </a>
               );
             })}
-            <a
-              href={user ? '/saved' : '/sign-in'}
-              className="nav-link mobile-nav-link"
-              onClick={(e) => handleLinkClick(e, user ? '/saved' : '/sign-in')}
-            >
-              {user
-                ? `${copy.savedScans}${savedCount > 0 ? ` (${savedCount})` : ''}`
-                : copy.signIn}
-            </a>
             <div className="mobile-drawer-actions">
               <button
                 type="button"
@@ -219,18 +203,6 @@ export function TopBar({
               >
                 Search site
               </button>
-              {user && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onSignOut();
-                  }}
-                >
-                  {copy.signOut}
-                </button>
-              )}
               <button
                 type="button"
                 className="btn btn-ghost"

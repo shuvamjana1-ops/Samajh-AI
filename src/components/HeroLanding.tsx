@@ -2,6 +2,8 @@ import { useState, type ChangeEvent, type FormEvent, type RefObject } from 'reac
 import { DEMO_ANALYSES, UI_COPY } from '../data/demoAgreement';
 import { answerDemoQuestion, LANGUAGE_CONFIG } from '../lib/documentLogic';
 import type { Language, QaMessage } from '../types/document';
+import { HighlightedText } from './HighlightedText';
+import { ScrambleText } from './ScrambleText';
 
 interface HeroLandingProps {
   language: Language;
@@ -9,6 +11,8 @@ interface HeroLandingProps {
   fileInputRef: RefObject<HTMLInputElement | null>;
   onFilesSelected: (files: FileList | null) => void;
   onLoadSample: () => void;
+  onOpenCompressor: (seedFile?: File | null) => void;
+  oversizedFile?: File | null;
   uploadError: string | null;
 }
 
@@ -20,6 +24,8 @@ export function HeroLanding({
   fileInputRef,
   onFilesSelected,
   onLoadSample,
+  onOpenCompressor,
+  oversizedFile = null,
   uploadError,
 }: HeroLandingProps) {
   const copy = UI_COPY[language];
@@ -86,12 +92,21 @@ export function HeroLanding({
 
         <div className="swiss-hero-headline-col">
           <h1 id="hero-title" className="hero-headline swiss-hero-h1">
-            {copy.heroTitle}
+            <ScrambleText
+              text={copy.heroTitle}
+              highlightWords={copy.heroTitleHighlights}
+              durationMs={720}
+            />
           </h1>
         </div>
 
         <div className="swiss-hero-meta-col">
-          <p className="body-lead swiss-hero-copy">{copy.heroSubtitle}</p>
+          <p className="body-lead swiss-hero-copy">
+            <HighlightedText
+              text={copy.heroSubtitle}
+              highlightWords={copy.heroSubtitleHighlights}
+            />
+          </p>
 
           <div className="swiss-lang-switch" role="group" aria-label="Language">
             {LANGUAGES.map((code) => {
@@ -132,6 +147,19 @@ export function HeroLanding({
           {uploadError && (
             <div className="error-card" role="alert">
               <p className="body-text">{uploadError}</p>
+              {oversizedFile && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => onOpenCompressor(oversizedFile)}
+                  >
+                    {language === 'hi'
+                      ? 'इसे 8 MB में कंप्रेस करें'
+                      : 'Compress to 8 MB & continue'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -143,19 +171,31 @@ export function HeroLanding({
             01
           </span>
           <h2 id="section-scan" className="swiss-band-title">
-            {copy.whatChecksHeading}
+            <ScrambleText text={copy.whatChecksHeading} durationMs={480} />
           </h2>
         </div>
 
         <div className="swiss-content-col">
-          <p className="body-lead">{copy.fileHint}</p>
-          <div className="swiss-inline-action">
+          <p className="body-lead">
+            <HighlightedText
+              text={copy.fileHint}
+              highlightWords={copy.fileHintHighlights}
+            />
+          </p>
+          <div className="swiss-inline-action swiss-inline-actions-row">
             <button
               type="button"
               className="swiss-text-toggle swiss-text-toggle-link"
               onClick={onLoadSample}
             >
               {copy.sampleButton}
+            </button>
+            <button
+              type="button"
+              className="swiss-text-toggle swiss-text-toggle-link"
+              onClick={() => onOpenCompressor(null)}
+            >
+              {language === 'hi' ? 'सटीक साइज में कंप्रेस करें' : 'Compress file to exact size'}
             </button>
           </div>
         </div>
@@ -167,7 +207,7 @@ export function HeroLanding({
             02
           </span>
           <h2 id="section-understand" className="swiss-band-title">
-            {language === 'hi' ? 'समझें' : 'Understand'}
+            <ScrambleText text={language === 'hi' ? 'समझें' : 'Understand'} durationMs={480} />
           </h2>
         </div>
 
@@ -205,7 +245,7 @@ export function HeroLanding({
                     {row.value}
                   </td>
                   <td className="swiss-table-note" data-label={language === 'hi' ? 'टिप्पणी' : 'Note'}>
-                    {row.note}
+                    <HighlightedText text={row.note} autoDetectDocumentTerms />
                   </td>
                 </tr>
               ))}
@@ -220,7 +260,7 @@ export function HeroLanding({
             03
           </span>
           <h2 id="section-act" className="swiss-band-title">
-            {language === 'hi' ? 'कदम उठाएं' : 'Act'}
+            <ScrambleText text={language === 'hi' ? 'कदम उठाएं' : 'Act'} durationMs={480} />
           </h2>
         </div>
 
@@ -243,7 +283,9 @@ export function HeroLanding({
                     <span className={`swiss-checkbox-box ${done ? 'swiss-checkbox-box-done' : ''}`} aria-hidden="true">
                       {done ? 'x' : ''}
                     </span>
-                    <span className="swiss-check-text">{step}</span>
+                      <span className="swiss-check-text">
+                        <HighlightedText text={step} autoDetectDocumentTerms />
+                      </span>
                   </button>
                 </li>
               );

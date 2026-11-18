@@ -30,7 +30,7 @@ jobs:
       - name: Run unit and rules tests
         run: |
           npx eslint firestore.rules
-          npx tsx --test src/lib/documentLogic.test.ts src/lib/requestSchemas.test.ts src/lib/freeAiProviders.test.ts firestore.rules.test.ts
+          npx tsx --test src/lib/documentLogic.test.ts src/lib/requestSchemas.test.ts src/lib/freeAiProviders.test.ts src/lib/textScramble.test.ts src/lib/textHighlight.test.ts src/lib/docCompressor.test.ts firestore.rules.test.ts
 
       - name: Dependency vulnerability audit
         run: |

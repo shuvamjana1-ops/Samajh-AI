@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { User } from 'firebase/auth';
-import { AuthPage } from './components/AuthPage';
+import { AppPreloader } from './components/AppPreloader';
 import { CapturePreview } from './components/CapturePreview';
 import { DisclaimerFooter } from './components/DisclaimerFooter';
+import { DocumentCompressor } from './components/DocumentCompressor';
 import { HeroLanding } from './components/HeroLanding';
 import { InfoPage } from './components/InfoPages';
 import { ResultWorkspace } from './components/ResultWorkspace';
-import { SavedScansPage } from './components/SavedScansPage';
 import { SiteChromeExtras } from './components/SiteChromeExtras';
 import { TopBar } from './components/TopBar';
 import { DEMO_ANALYSES } from './data/demoAgreement';
@@ -19,30 +18,20 @@ import {
 import { captureUtmFromUrl } from './lib/utm';
 import {
   answerDemoQuestion,
+  MAX_FILE_SIZE_BYTES,
   validateDocumentFiles,
 } from './lib/documentLogic';
-import {
-  deleteSavedAnalysis,
-  ensureUserProfile,
-  saveAnalysisToAccount,
-  signInWithGoogle,
-  signOutUser,
-  subscribeAuthState,
-  subscribeSavedAnalyses,
-  updatePreferredLanguage,
-  updateSavedSteps,
-} from './lib/firebase';
+import { inferDocumentMime } from './lib/docCompressor';
 import type {
   AskResponse,
   DocumentAnalysis,
   Language,
   QaMessage,
-  SavedAnalysisRecord,
   ThemeMode,
   UploadedPage,
 } from './types/document';
 
-type ScreenState = 'landing' | 'preview' | 'result' | 'auth' | 'saved';
+type ScreenState = 'landing' | 'preview' | 'result';
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -81,16 +70,18 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [currentPath, setCurrentPath] = useState<string>(getInitialPath);
-  const [screen, setScreen] = useState<ScreenState>(() => {
-    const initPath = getInitialPath();
-    if (initPath === '/sign-in') return 'auth';
-    if (initPath === '/saved') return 'saved';
-    return 'landing';
+  const [screen, setScreen] = useState<ScreenState>('landing');
+  const [showPreloader, setShowPreloader] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('autostart') !== '1';
   });
   const [searchOpen, setSearchOpen] = useState(false);
 
   const [pages, setPages] = useState<UploadedPage[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [oversizedUploadFile, setOversizedUploadFile] = useState<File | null>(null);
+  const [compressorSeedFile, setCompressorSeedFile] = useState<File | null>(null);
 
   const [analysis, setAnalysis] = useState<DocumentAnalysis | null>(null);
   const [analysisCache, setAnalysisCache] = useState<Partial<Record<Language, DocumentAnalysis>>>({});
@@ -106,19 +97,7 @@ export default function App() {
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
 
-  const [user, setUser] = useState<User | null>(null);
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [returnScreenAfterAuth, setReturnScreenAfterAuth] = useState<'landing' | 'result'>('landing');
-
-  const [savedRecords, setSavedRecords] = useState<SavedAnalysisRecord[]>([]);
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
-  const [savedError, setSavedError] = useState<string | null>(null);
-
-  const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [initialCompletedSteps, setInitialCompletedSteps] = useState<number[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -149,9 +128,7 @@ export default function App() {
     const onPopState = () => {
       const next = normalizePathname(window.location.pathname);
       setCurrentPath(next);
-      if (next === '/sign-in') setScreen('auth');
-      else if (next === '/saved') setScreen('saved');
-      else setScreen('landing');
+      setScreen('landing');
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -216,41 +193,6 @@ export default function App() {
     return () => observer.disconnect();
   }, [currentPath, screen, analysis]);
 
-  useEffect(() => {
-    const unsub = subscribeAuthState((nextUser) => {
-      setUser(nextUser);
-      if (nextUser) {
-        void ensureUserProfile(nextUser, language).catch(() => {});
-      } else {
-        setSavedRecords([]);
-        setActiveSavedId(null);
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    if (!user) {
-      setSavedRecords([]);
-      setIsLoadingSaved(false);
-      return;
-    }
-    setIsLoadingSaved(true);
-    setSavedError(null);
-    const unsub = subscribeSavedAnalyses(
-      user.uid,
-      (records) => {
-        setSavedRecords(records);
-        setIsLoadingSaved(false);
-      },
-      () => {
-        setSavedError('Could not load saved scans right now.');
-        setIsLoadingSaved(false);
-      }
-    );
-    return () => unsub();
-  }, [user]);
-
   const revokePageUrls = (list: UploadedPage[]) => {
     for (const p of list) {
       if (p.previewUrl) {
@@ -264,17 +206,19 @@ export default function App() {
       window.history.pushState({}, '', path);
     }
     setCurrentPath(path);
-    if (path === '/sign-in') {
-      setAuthError(null);
-      setScreen('auth');
-    } else if (path === '/saved') {
-      setScreen(user ? 'saved' : 'auth');
-    } else if (path === '/') {
+    if (path === '/') {
       setScreen('landing');
     }
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
+  };
+
+  const handleOpenCompressor = (seedFile: File | null = null) => {
+    setCompressorSeedFile(seedFile);
+    setUploadError(null);
+    setOversizedUploadFile(null);
+    navigateTo('/compress');
   };
 
   const handleResetToLanding = () => {
@@ -286,9 +230,7 @@ export default function App() {
     setAnalysis(null);
     setAnalysisCache({});
     setIsDemo(false);
-    setActiveSavedId(null);
     setInitialCompletedSteps([]);
-    setSaveError(null);
     setUploadError(null);
     setAnalyzeError(null);
     setTranslateError(null);
@@ -306,9 +248,7 @@ export default function App() {
     setTranslateError(null);
     setQaMessages([]);
     setAskError(null);
-    setActiveSavedId(null);
     setInitialCompletedSteps([]);
-    setSaveError(null);
     setIsDemo(true);
     setAnalysis(DEMO_ANALYSES[activeLang]);
     setAnalysisCache(DEMO_ANALYSES);
@@ -319,134 +259,13 @@ export default function App() {
     setScreen('result');
   };
 
-  const handleOpenAuth = (fromScreen: 'landing' | 'result' = 'landing') => {
-    setAuthError(null);
-    setReturnScreenAfterAuth(fromScreen);
-    if (typeof window !== 'undefined' && normalizePathname(window.location.pathname) !== '/sign-in') {
-      window.history.pushState({}, '', '/sign-in');
-    }
-    setCurrentPath('/sign-in');
-    setScreen('auth');
-  };
-
-  const handleGoogleSignIn = async () => {
-    if (isSigningIn) return;
-    setIsSigningIn(true);
-    setAuthError(null);
-    try {
-      await signInWithGoogle(language);
-      if (returnScreenAfterAuth === 'result' && analysis) {
-        if (typeof window !== 'undefined') window.history.pushState({}, '', '/');
-        setCurrentPath('/');
-        setScreen('result');
-      } else {
-        if (typeof window !== 'undefined') window.history.pushState({}, '', '/saved');
-        setCurrentPath('/saved');
-        setScreen('saved');
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('popup-closed-by-user')) {
-        setAuthError('Sign-in was cancelled. Tap Continue with Google to try again.');
-      } else if (msg.includes('popup-blocked')) {
-        setAuthError('Your browser blocked the sign-in popup. Please allow popups for this site and retry.');
-      } else {
-        setAuthError('Could not complete Google Sign-In right now. Please try again.');
-      }
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOutUser();
-      setActiveSavedId(null);
-      if (screen === 'saved' || currentPath === '/saved') {
-        navigateTo('/');
-      }
-    } catch {
-      setSavedError('Could not sign out right now. Please try again.');
-    }
-  };
-
-  const handleSaveAnalysis = async (completedSteps: number[]) => {
-    if (!analysis || isSaving) return;
-    if (!user) {
-      handleOpenAuth('result');
-      return;
-    }
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const id = await saveAnalysisToAccount(
-        user,
-        analysis,
-        language,
-        completedSteps,
-        activeSavedId
-      );
-      setActiveSavedId(id);
-    } catch {
-      setSaveError('Could not save this summary right now. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleStepsChange = (completedSteps: number[]) => {
     setInitialCompletedSteps(completedSteps);
-    if (user && activeSavedId) {
-      void updateSavedSteps(user.uid, activeSavedId, completedSteps).catch(() => {});
-    }
   };
 
-  const handleOpenSavedRecord = (record: SavedAnalysisRecord) => {
-    revokePageUrls(pages);
-    setPages([]);
-    setIsDemo(false);
-    setUploadError(null);
-    setAnalyzeError(null);
-    setTranslateError(null);
-    setQaMessages([]);
-    setAskError(null);
-    setSaveError(null);
-    const loaded: DocumentAnalysis = {
-      readable: true,
-      type: record.type,
-      summary: record.summary,
-      deadlines: record.deadlines,
-      money: record.money,
-      risks: record.risks,
-      steps: record.steps,
-    };
-    setLanguage(record.language);
-    setAnalysis(loaded);
-    setAnalysisCache({ [record.language]: loaded });
-    setActiveSavedId(record.id);
-    setInitialCompletedSteps(record.completedSteps);
-    if (typeof window !== 'undefined') window.history.pushState({}, '', '/');
-    setCurrentPath('/');
-    setScreen('result');
-  };
+  const processSelectedFiles = async (selected: File[], append = false) => {
+    if (selected.length === 0) return;
 
-  const handleDeleteSavedRecord = async (id: string) => {
-    if (!user) return;
-    setSavedError(null);
-    try {
-      await deleteSavedAnalysis(user.uid, id);
-      if (activeSavedId === id) {
-        setActiveSavedId(null);
-      }
-    } catch {
-      setSavedError('Could not delete that saved summary right now.');
-    }
-  };
-
-  const handleFilesSelected = async (fileList: FileList | null, append = false) => {
-    if (!fileList || fileList.length === 0) return;
-
-    const selected = Array.from(fileList);
     const existingCount = append ? pages.length : 0;
     const validation = validateDocumentFiles(
       selected.map((f) => ({ name: f.name, type: f.type, size: f.size })),
@@ -454,6 +273,10 @@ export default function App() {
     );
 
     if (!validation.valid) {
+      const firstOversized = selected.find(
+        (f) => f.size > MAX_FILE_SIZE_BYTES && inferDocumentMime(f.name, f.type) !== null
+      );
+      setOversizedUploadFile(firstOversized ?? null);
       if (append) {
         setAnalyzeError(validation.errorMessage ?? 'Invalid file selected.');
       } else {
@@ -462,6 +285,7 @@ export default function App() {
       return;
     }
 
+    setOversizedUploadFile(null);
     setUploadError(null);
     setAnalyzeError(null);
 
@@ -501,10 +325,19 @@ export default function App() {
       setAnalysis(null);
       setAnalysisCache({});
       setQaMessages([]);
+      if (typeof window !== 'undefined' && normalizePathname(window.location.pathname) !== '/') {
+        window.history.pushState({}, '', '/');
+      }
+      setCurrentPath('/');
       setScreen('preview');
     } catch {
       setUploadError('Could not read the selected file. Please try another JPG, PNG, or PDF.');
     }
+  };
+
+  const handleFilesSelected = async (fileList: FileList | null, append = false) => {
+    if (!fileList || fileList.length === 0) return;
+    await processSelectedFiles(Array.from(fileList), append);
   };
 
   const handleRemovePage = (id: string) => {
@@ -550,9 +383,7 @@ export default function App() {
 
       setAnalysis(payload.analysis);
       setAnalysisCache({ [language]: payload.analysis });
-      setActiveSavedId(null);
       setInitialCompletedSteps([]);
-      setSaveError(null);
       setQaMessages([]);
       setScreen('result');
     } catch (err) {
@@ -570,9 +401,6 @@ export default function App() {
     if (nextLang === language) return;
     setLanguage(nextLang);
     setTranslateError(null);
-    if (user) {
-      void updatePreferredLanguage(user.uid, nextLang).catch(() => {});
-    }
 
     if (screen !== 'result' || !analysis) {
       return;
@@ -689,6 +517,7 @@ export default function App() {
 
   const isSubPage =
     currentPath === '/services' ||
+    currentPath === '/compress' ||
     currentPath === '/about' ||
     currentPath === '/contact' ||
     currentPath === '/faq' ||
@@ -713,6 +542,13 @@ export default function App() {
         ))}
       </div>
 
+      {showPreloader && (
+        <AppPreloader
+          language={language}
+          onComplete={() => setShowPreloader(false)}
+        />
+      )}
+
       <TopBar
         language={language}
         onLanguageChange={handleLanguageChange}
@@ -722,48 +558,21 @@ export default function App() {
         showHeaderLang={isNotFound || isSubPage || screen !== 'landing'}
         onNavigate={navigateTo}
         onOpenSearch={() => setSearchOpen(true)}
-        user={user}
-        savedCount={savedRecords.length}
-        onSignOut={handleSignOut}
       />
 
       <main id="main-content" className="main-section" tabIndex={-1}>
         {isNotFound && <InfoPage route={null} onNavigate={navigateTo} />}
 
-        {!isNotFound && isSubPage && (
+        {!isNotFound && currentPath === '/compress' && (
+          <DocumentCompressor
+            language={language}
+            initialFile={compressorSeedFile}
+            onScanCompressedFile={(file) => void processSelectedFiles([file], false)}
+          />
+        )}
+
+        {!isNotFound && isSubPage && currentPath !== '/compress' && (
           <InfoPage route={currentPath as AppRoute} onNavigate={navigateTo} />
-        )}
-
-        {!isNotFound && !isSubPage && (screen === 'auth' || (screen === 'saved' && !user)) && (
-          <AuthPage
-            language={language}
-            isSigningIn={isSigningIn}
-            authError={authError}
-            onGoogleSignIn={handleGoogleSignIn}
-            onBackGuest={() => {
-              if (returnScreenAfterAuth === 'result' && analysis) {
-                if (typeof window !== 'undefined') window.history.pushState({}, '', '/');
-                setCurrentPath('/');
-                setScreen('result');
-              } else {
-                navigateTo('/');
-              }
-            }}
-          />
-        )}
-
-        {!isNotFound && !isSubPage && screen === 'saved' && user && (
-          <SavedScansPage
-            language={language}
-            user={user}
-            records={savedRecords}
-            isLoading={isLoadingSaved}
-            error={savedError}
-            onOpenRecord={handleOpenSavedRecord}
-            onDeleteRecord={handleDeleteSavedRecord}
-            onNewScan={handleResetToLanding}
-            onSignOut={handleSignOut}
-          />
         )}
 
         {!isNotFound && !isSubPage && screen === 'landing' && (
@@ -773,6 +582,8 @@ export default function App() {
             fileInputRef={fileInputRef}
             onFilesSelected={(files) => handleFilesSelected(files, false)}
             onLoadSample={() => handleLoadSample()}
+            onOpenCompressor={handleOpenCompressor}
+            oversizedFile={oversizedUploadFile}
             uploadError={uploadError}
           />
         )}
@@ -803,12 +614,7 @@ export default function App() {
             isAsking={isAsking}
             askError={askError}
             onAskQuestion={handleAskQuestion}
-            isSignedIn={Boolean(user)}
-            isSaved={Boolean(activeSavedId)}
-            isSaving={isSaving}
-            saveError={saveError}
             initialCompletedSteps={initialCompletedSteps}
-            onSaveAnalysis={handleSaveAnalysis}
             onStepsChange={handleStepsChange}
           />
         )}
