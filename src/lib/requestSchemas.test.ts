@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DailyQuotaTracker,
   validateAnalyzeBody,
   validateAskBody,
   validateContactBody,
@@ -29,8 +30,60 @@ test('validateEnvConfig validates ports, URLs, and production GEMINI_API_KEY', (
   assert.throws(() => validateEnvConfig({ APP_URL: 'javascript:alert(1)' }, false));
   assert.throws(() => validateEnvConfig({}, true));
 
-  const prodResult = validateEnvConfig({ GEMINI_API_KEY: 'configured-key' }, true);
+  const prodResult = validateEnvConfig(
+    {
+      GEMINI_API_KEY: 'configured-key',
+      DISABLE_PAID_AI: 'true',
+      AI_DAILY_GLOBAL_LIMIT: '200',
+      AI_DAILY_IP_LIMIT: '10',
+    },
+    true
+  );
   assert.equal(prodResult.geminiConfigured, true);
+  assert.equal(prodResult.disablePaidAi, true);
+  assert.equal(prodResult.aiDailyGlobalLimit, 200);
+  assert.equal(prodResult.aiDailyIpLimit, 10);
+
+  assert.throws(() => validateEnvConfig({ DISABLE_PAID_AI: 'yes' }, false));
+  assert.throws(() => validateEnvConfig({ AI_DAILY_GLOBAL_LIMIT: '0' }, false));
+  assert.throws(() => validateEnvConfig({ AI_DAILY_IP_LIMIT: 'abc' }, false));
+  assert.throws(() => validateEnvConfig({ AI_PROVIDER: 'unknown' }, false));
+  assert.throws(() => validateEnvConfig({ GEMINI_MODEL: 'gemini-1.5-flash' }, false));
+  assert.throws(() => validateEnvConfig({ OLLAMA_BASE_URL: 'ftp://localhost:11434' }, false));
+
+  const groqOnlyProd = validateEnvConfig(
+    { GROQ_API_KEY: 'gsk-free-tier', GEMINI_MODEL: 'gemini-3.1-flash-lite' },
+    true
+  );
+  assert.equal(groqOnlyProd.groqConfigured, true);
+  assert.equal(groqOnlyProd.anyAiConfigured, true);
+  assert.equal(groqOnlyProd.geminiModel, 'gemini-3.1-flash-lite');
+});
+
+test('DailyQuotaTracker enforces per-IP and global daily caps and resets on UTC day rollover', () => {
+  const tracker = new DailyQuotaTracker(3, 2);
+  const day1 = Date.parse('2026-11-18T12:00:00Z');
+  const day2 = Date.parse('2026-11-19T00:01:00Z');
+
+  assert.deepEqual(tracker.consume('198.51.100.1', day1), { ok: true });
+  assert.deepEqual(tracker.consume('198.51.100.1', day1), { ok: true });
+
+  const ipBlocked = tracker.consume('198.51.100.1', day1);
+  assert.equal(ipBlocked.ok, false);
+  if (!ipBlocked.ok) {
+    assert.equal(ipBlocked.scope, 'ip');
+    assert.ok(ipBlocked.retryAfterSeconds > 0);
+  }
+
+  assert.deepEqual(tracker.consume('198.51.100.2', day1), { ok: true });
+  const globalBlocked = tracker.consume('198.51.100.2', day1);
+  assert.equal(globalBlocked.ok, false);
+  if (!globalBlocked.ok) {
+    assert.equal(globalBlocked.scope, 'global');
+    assert.ok(globalBlocked.retryAfterSeconds > 0);
+  }
+
+  assert.deepEqual(tracker.consume('198.51.100.1', day2), { ok: true });
 });
 
 test('validateContactBody rejects unknown fields, honeypot, bad email, and oversized fields', () => {

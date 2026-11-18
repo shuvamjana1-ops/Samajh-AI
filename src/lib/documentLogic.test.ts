@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import {
   answerDemoQuestion,
   buildSpeechScript,
+  clampPreviewZoom,
+  DEFAULT_PREVIEW_ZOOM,
   formatPreviewAltText,
   parseAndValidateAnalysis,
   parseAndValidateAskResponse,
+  stepPreviewZoom,
   stripImageMetadata,
   validateDocumentFiles,
   verifyFileSignature,
@@ -148,4 +151,15 @@ test('formatPreviewAltText generates readable alt descriptions from filenames', 
     formatPreviewAltText('.png', 1),
     'Document preview of Uploaded Document (page 1)'
   );
+});
+
+test('preview zoom helpers step cleanly within 100% to 300% bounds', () => {
+  assert.equal(DEFAULT_PREVIEW_ZOOM, 100);
+  assert.equal(stepPreviewZoom(100, 'out'), 100);
+  assert.equal(stepPreviewZoom(100, 'in'), 150);
+  assert.equal(stepPreviewZoom(150, 'in'), 200);
+  assert.equal(stepPreviewZoom(300, 'in'), 300);
+  assert.equal(stepPreviewZoom(300, 'out'), 250);
+  assert.equal(clampPreviewZoom(999), 300);
+  assert.equal(clampPreviewZoom(Number.NaN), 100);
 });

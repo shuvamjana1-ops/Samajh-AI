@@ -4,7 +4,16 @@ export interface EnvValidationResult {
   port: number;
   appUrl?: string;
   allowIndexing: boolean;
+  aiProvider: 'auto' | 'gemini' | 'groq' | 'openrouter' | 'ollama';
+  geminiModel: 'gemini-4-hydrogen' | 'gemini-3.1-flash-lite';
   geminiConfigured: boolean;
+  groqConfigured: boolean;
+  openrouterConfigured: boolean;
+  ollamaBaseUrl?: string;
+  anyAiConfigured: boolean;
+  disablePaidAi: boolean;
+  aiDailyGlobalLimit: number;
+  aiDailyIpLimit: number;
 }
 
 export type ValidationResult<T> =
@@ -65,9 +74,69 @@ export function validateEnvConfig(
     throw new Error('Server configuration error: invalid environment settings.');
   }
 
+  const rawDisablePaidAi = env.DISABLE_PAID_AI?.trim();
+  if (rawDisablePaidAi && rawDisablePaidAi !== 'true' && rawDisablePaidAi !== 'false') {
+    throw new Error('Server configuration error: invalid environment settings.');
+  }
+
+  const parsePositiveIntLimit = (raw: string | undefined, fallback: number, max: number): number => {
+    const trimmed = raw?.trim();
+    if (!trimmed) return fallback;
+    if (!/^\d+$/.test(trimmed)) {
+      throw new Error('Server configuration error: invalid environment settings.');
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) {
+      throw new Error('Server configuration error: invalid environment settings.');
+    }
+    return parsed;
+  };
+
+  const aiDailyGlobalLimit = parsePositiveIntLimit(env.AI_DAILY_GLOBAL_LIMIT, 500, 100000);
+  const aiDailyIpLimit = parsePositiveIntLimit(env.AI_DAILY_IP_LIMIT, 30, 10000);
+
+  const rawAiProvider = env.AI_PROVIDER?.trim().toLowerCase() || 'auto';
+  if (
+    rawAiProvider !== 'auto' &&
+    rawAiProvider !== 'gemini' &&
+    rawAiProvider !== 'groq' &&
+    rawAiProvider !== 'openrouter' &&
+    rawAiProvider !== 'ollama'
+  ) {
+    throw new Error('Server configuration error: invalid environment settings.');
+  }
+
+  const rawGeminiModel = env.GEMINI_MODEL?.trim() || 'gemini-4-hydrogen';
+  if (rawGeminiModel !== 'gemini-4-hydrogen' && rawGeminiModel !== 'gemini-3.1-flash-lite') {
+    throw new Error('Server configuration error: invalid environment settings.');
+  }
+
   const rawGemini = env.GEMINI_API_KEY?.trim();
   const geminiConfigured = Boolean(rawGemini && rawGemini !== 'MY_GEMINI_API_KEY');
-  if (isProd && !geminiConfigured) {
+
+  const rawGroq = env.GROQ_API_KEY?.trim();
+  const groqConfigured = Boolean(rawGroq && rawGroq !== 'MY_GROQ_API_KEY');
+
+  const rawOpenrouter = env.OPENROUTER_API_KEY?.trim();
+  const openrouterConfigured = Boolean(rawOpenrouter && rawOpenrouter !== 'MY_OPENROUTER_API_KEY');
+
+  const rawOllamaUrl = env.OLLAMA_BASE_URL?.trim();
+  let ollamaBaseUrl: string | undefined;
+  if (rawOllamaUrl) {
+    try {
+      const parsedOllama = new URL(rawOllamaUrl);
+      if (parsedOllama.protocol !== 'http:' && parsedOllama.protocol !== 'https:') {
+        throw new Error('INVALID_OLLAMA_URL');
+      }
+      ollamaBaseUrl = parsedOllama.origin;
+    } catch {
+      throw new Error('Server configuration error: invalid environment settings.');
+    }
+  }
+
+  const anyAiConfigured =
+    geminiConfigured || groqConfigured || openrouterConfigured || Boolean(ollamaBaseUrl);
+  if (isProd && !anyAiConfigured) {
     throw new Error('Server configuration error: missing required environment variables.');
   }
 
@@ -75,8 +144,88 @@ export function validateEnvConfig(
     port,
     appUrl,
     allowIndexing: rawIndexing === 'true',
+    aiProvider: rawAiProvider,
+    geminiModel: rawGeminiModel,
     geminiConfigured,
+    groqConfigured,
+    openrouterConfigured,
+    ollamaBaseUrl,
+    anyAiConfigured,
+    disablePaidAi: rawDisablePaidAi === 'true',
+    aiDailyGlobalLimit,
+    aiDailyIpLimit,
   };
+}
+
+export class DailyQuotaTracker {
+  private dayKey = '';
+  private globalCount = 0;
+  private readonly ipCounts = new Map<string, number>();
+
+  constructor(
+    private readonly globalLimit: number,
+    private readonly ipLimit: number,
+    private readonly maxTrackedIps = 10000
+  ) {}
+
+  private resetIfNewDay(nowMs: number): string {
+    const today = new Date(nowMs).toISOString().slice(0, 10);
+    if (today !== this.dayKey) {
+      this.dayKey = today;
+      this.globalCount = 0;
+      this.ipCounts.clear();
+    }
+    return today;
+  }
+
+  private secondsUntilUtcMidnight(nowMs: number): number {
+    const now = new Date(nowMs);
+    const nextMidnight = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 1,
+      0,
+      0,
+      0
+    );
+    return Math.max(1, Math.ceil((nextMidnight - nowMs) / 1000));
+  }
+
+  consume(
+    rawIp: string,
+    nowMs = Date.now()
+  ): { ok: true } | { ok: false; scope: 'global' | 'ip'; retryAfterSeconds: number } {
+    this.resetIfNewDay(nowMs);
+    const ip = rawIp.trim() || 'unknown';
+    const currentIpCount = this.ipCounts.get(ip) ?? 0;
+
+    if (currentIpCount >= this.ipLimit) {
+      return {
+        ok: false,
+        scope: 'ip',
+        retryAfterSeconds: this.secondsUntilUtcMidnight(nowMs),
+      };
+    }
+
+    if (this.globalCount >= this.globalLimit) {
+      return {
+        ok: false,
+        scope: 'global',
+        retryAfterSeconds: this.secondsUntilUtcMidnight(nowMs),
+      };
+    }
+
+    if (!this.ipCounts.has(ip) && this.ipCounts.size >= this.maxTrackedIps) {
+      const oldestKey = this.ipCounts.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.ipCounts.delete(oldestKey);
+      }
+    }
+
+    this.ipCounts.set(ip, currentIpCount + 1);
+    this.globalCount += 1;
+    return { ok: true };
+  }
 }
 
 function validateLanguageField(

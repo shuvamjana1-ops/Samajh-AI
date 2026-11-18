@@ -36,6 +36,36 @@ export const ALLOWED_MIME_TYPES = new Set([
 export const MAX_PAGES = 5;
 export const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
 
+export const PREVIEW_ZOOM_LEVELS = [100, 150, 200, 250, 300] as const;
+export type PreviewZoomLevel = (typeof PREVIEW_ZOOM_LEVELS)[number];
+export const DEFAULT_PREVIEW_ZOOM: PreviewZoomLevel = 100;
+
+export function clampPreviewZoom(value: number): PreviewZoomLevel {
+  if (!Number.isFinite(value)) return DEFAULT_PREVIEW_ZOOM;
+  let closest: PreviewZoomLevel = DEFAULT_PREVIEW_ZOOM;
+  let minDiff = Infinity;
+  for (const level of PREVIEW_ZOOM_LEVELS) {
+    const diff = Math.abs(level - value);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = level;
+    }
+  }
+  return closest;
+}
+
+export function stepPreviewZoom(
+  current: PreviewZoomLevel,
+  direction: 'in' | 'out'
+): PreviewZoomLevel {
+  const idx = PREVIEW_ZOOM_LEVELS.indexOf(current);
+  const safeIdx = idx === -1 ? 0 : idx;
+  if (direction === 'in') {
+    return PREVIEW_ZOOM_LEVELS[Math.min(PREVIEW_ZOOM_LEVELS.length - 1, safeIdx + 1)];
+  }
+  return PREVIEW_ZOOM_LEVELS[Math.max(0, safeIdx - 1)];
+}
+
 export interface FileValidationResult {
   valid: boolean;
   errorMessage?: string;
@@ -239,8 +269,18 @@ function cleanString(value: unknown, fallback = '', maxLen = 400): string {
 
 export function stripMarkdownCodeFence(raw: string): string {
   const trimmed = raw.trim();
-  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match ? match[1].trim() : trimmed;
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) {
+    return fenced[1].trim();
+  }
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      return trimmed.slice(firstBrace, lastBrace + 1).trim();
+    }
+  }
+  return trimmed;
 }
 
 export function parseAndValidateAnalysis(rawJson: string): DocumentAnalysis {
