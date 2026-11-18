@@ -1,13 +1,12 @@
-import { useState, type ChangeEvent, type FormEvent, type RefObject } from 'react';
-import { DEMO_ANALYSES, UI_COPY } from '../data/demoAgreement';
-import { answerDemoQuestion, LANGUAGE_CONFIG } from '../lib/documentLogic';
-import type { Language, QaMessage } from '../types/document';
+import { FileText, Upload } from 'lucide-react';
+import { useId, useState, type ChangeEvent, type DragEvent, type RefObject } from 'react';
+import { UI_COPY } from '../data/demoAgreement';
+import type { Language } from '../types/document';
 import { HighlightedText } from './HighlightedText';
 import { ScrambleText } from './ScrambleText';
 
 interface HeroLandingProps {
   language: Language;
-  onLanguageChange: (lang: Language) => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
   onFilesSelected: (files: FileList | null) => void;
   onLoadSample: () => void;
@@ -16,11 +15,8 @@ interface HeroLandingProps {
   uploadError: string | null;
 }
 
-const LANGUAGES: Language[] = ['en', 'hi'];
-
 export function HeroLanding({
   language,
-  onLanguageChange,
   fileInputRef,
   onFilesSelected,
   onLoadSample,
@@ -29,61 +25,67 @@ export function HeroLanding({
   uploadError,
 }: HeroLandingProps) {
   const copy = UI_COPY[language];
-  const sample = DEMO_ANALYSES[language];
-
-  const [checkedSteps, setCheckedSteps] = useState<number[]>([]);
-  const [question, setQuestion] = useState('');
-  const [qaMessages, setQaMessages] = useState<QaMessage[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const uploadInputId = useId();
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     onFilesSelected(e.target.files);
     e.target.value = '';
   };
 
-  const toggleStep = (index: number) => {
-    setCheckedSteps((prev) =>
-      prev.includes(index) ? prev.filter((item) => item !== index) : [...prev, index]
-    );
-  };
-
-  const handleAskSubmit = (e: FormEvent) => {
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const trimmed = question.trim();
-    if (!trimmed) return;
-    const reply = answerDemoQuestion(trimmed, language);
-    setQaMessages((prev) => [
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        question: trimmed,
-        answer: reply.answer,
-        citedClause: reply.citedClause,
-        notInDocument: reply.notInDocument,
-      },
-      ...prev.slice(0, 2),
-    ]);
-    setQuestion('');
+    if (!isDragging) setIsDragging(true);
   };
 
-  const understandRows = [
-    ...sample.deadlines.slice(0, 2).map((d) => ({
-      kind: 'status' as const,
-      label: d.what,
-      value: d.when,
-      note: d.note,
-    })),
-    ...sample.money.slice(0, 2).map((m) => ({
-      kind: 'plain' as const,
-      label: m.label,
-      value: m.amount,
-      note: m.note,
-    })),
-    ...sample.risks.slice(0, 2).map((r) => ({
-      kind: 'status' as const,
-      label: r.clause,
-      value: copy.severityLabels[r.sev],
-      note: r.text,
-    })),
-  ];
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      onFilesSelected(e.dataTransfer.files);
+    }
+  };
+
+  const steps =
+    language === 'hi'
+      ? [
+          {
+            num: '01',
+            title: 'कागज़ अपलोड करें',
+            detail: 'अपने समझौते, अनुबंध या नोटिस की फोटो या PDF (8 MB, 5 पेज तक) डालें।',
+          },
+          {
+            num: '02',
+            title: 'सरल व्याख्या पाएं',
+            detail: 'तारीखें, पैसे, जोखिम वाली शर्तें और मुख्य सारांश आसान भाषा में पढ़ें या सुनें।',
+          },
+          {
+            num: '03',
+            title: 'सीधे सवाल पूछें',
+            detail: 'कागज़ से जुड़ा कोई भी सवाल लिखकर या बोलकर पूछें और क्लॉज़ के साथ जवाब पाएं।',
+          },
+        ]
+      : [
+          {
+            num: '01',
+            title: 'Upload contract or paper',
+            detail: 'Drop a JPG, PNG, or PDF of any agreement, notice, or form (up to 8 MB, 5 pages).',
+          },
+          {
+            num: '02',
+            title: 'Plain-language breakdown',
+            detail: 'Read or listen to a clear summary of due dates, payments, and risky clauses.',
+          },
+          {
+            num: '03',
+            title: 'Ask about your papers',
+            detail: 'Type or speak questions answered strictly from your document with cited clauses.',
+          },
+        ];
 
   return (
     <div className="swiss-home">
@@ -108,24 +110,8 @@ export function HeroLanding({
             />
           </p>
 
-          <div className="swiss-lang-switch" role="group" aria-label="Language">
-            {LANGUAGES.map((code) => {
-              const active = language === code;
-              return (
-                <button
-                  key={code}
-                  type="button"
-                  className={`swiss-text-toggle ${active ? 'swiss-text-toggle-active' : ''}`}
-                  aria-pressed={active}
-                  onClick={() => onLanguageChange(code)}
-                >
-                  {LANGUAGE_CONFIG[code].nativeLabel}
-                </button>
-              );
-            })}
-          </div>
-
           <input
+            id={uploadInputId}
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,application/pdf"
@@ -134,14 +120,69 @@ export function HeroLanding({
             onChange={handleInputChange}
           />
 
-          <div className="swiss-hero-cta">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {copy.scanButton}
-            </button>
+          <div
+            className={`swiss-dropzone ${isDragging ? 'swiss-dropzone-active' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <span className="dropzone-corner dropzone-corner-tl" aria-hidden="true" />
+            <span className="dropzone-corner dropzone-corner-tr" aria-hidden="true" />
+            <span className="dropzone-corner dropzone-corner-bl" aria-hidden="true" />
+            <span className="dropzone-corner dropzone-corner-br" aria-hidden="true" />
+
+            <label htmlFor={uploadInputId} className="swiss-dropzone-stage">
+              <span className="swiss-dropzone-icon" aria-hidden="true">
+                {isDragging ? <FileText size={22} /> : <Upload size={22} />}
+              </span>
+              <span className="swiss-dropzone-stage-text">
+                <span className="swiss-dropzone-title">
+                  {isDragging
+                    ? language === 'hi'
+                      ? 'दस्तावेज़ पढ़ने के लिए छोड़ें'
+                      : 'Release to read this document'
+                    : language === 'hi'
+                      ? 'अपना अनुबंध या कागज़ यहाँ डालें'
+                      : 'Drop your contract or paper here'}
+                </span>
+                <span className="swiss-dropzone-subtitle">
+                  {language === 'hi'
+                    ? 'फ़ाइल खींचकर लाएं या डिवाइस से चुनने के लिए यहाँ क्लिक करें'
+                    : 'Drag and drop files here, or click anywhere above to browse'}
+                </span>
+              </span>
+              <span className="swiss-dropzone-formats tabular-nums" aria-hidden="true">
+                PDF · JPG · PNG
+              </span>
+            </label>
+
+            <div className="swiss-dropzone-footer">
+              <div className="swiss-dropzone-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload size={17} aria-hidden="true" />
+                  <span>{copy.scanButton}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="swiss-text-toggle swiss-text-toggle-link"
+                  onClick={onLoadSample}
+                >
+                  {copy.sampleButton}
+                </button>
+              </div>
+
+              <p className="meta-text swiss-dropzone-meta">
+                <HighlightedText
+                  text={copy.fileHint}
+                  highlightWords={copy.fileHintHighlights}
+                />
+              </p>
+            </div>
           </div>
 
           {uploadError && (
@@ -165,167 +206,17 @@ export function HeroLanding({
         </div>
       </section>
 
-      <section className="swiss-band swiss-grid" aria-labelledby="section-scan">
-        <div className="swiss-num-col">
-          <span className="swiss-index-num" aria-hidden="true">
-            01
-          </span>
-          <h2 id="section-scan" className="swiss-band-title">
-            <ScrambleText text={copy.whatChecksHeading} durationMs={480} />
-          </h2>
-        </div>
-
-        <div className="swiss-content-col">
-          <p className="body-lead">
-            <HighlightedText
-              text={copy.fileHint}
-              highlightWords={copy.fileHintHighlights}
-            />
-          </p>
-          <div className="swiss-inline-action swiss-inline-actions-row">
-            <button
-              type="button"
-              className="swiss-text-toggle swiss-text-toggle-link"
-              onClick={onLoadSample}
-            >
-              {copy.sampleButton}
-            </button>
-            <button
-              type="button"
-              className="swiss-text-toggle swiss-text-toggle-link"
-              onClick={() => onOpenCompressor(null)}
-            >
-              {language === 'hi' ? 'सटीक साइज में कंप्रेस करें' : 'Compress file to exact size'}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="swiss-band swiss-grid" aria-labelledby="section-understand">
-        <div className="swiss-num-col">
-          <span className="swiss-index-num" aria-hidden="true">
-            02
-          </span>
-          <h2 id="section-understand" className="swiss-band-title">
-            <ScrambleText text={language === 'hi' ? 'समझें' : 'Understand'} durationMs={480} />
-          </h2>
-        </div>
-
-        <div className="swiss-content-col">
-          <p className="caption-text swiss-table-caption">
-            {language === 'hi'
-              ? 'नमूना किराया समझौता: समय सीमा, रकम और जोखिम'
-              : 'Sample rental agreement: deadlines, money, and risky clauses'}
-          </p>
-
-          <table className="swiss-table">
-            <thead>
-              <tr>
-                <th scope="col" className="caption-text">
-                  {language === 'hi' ? 'विषय' : 'Label'}
-                </th>
-                <th scope="col" className="caption-text">
-                  {language === 'hi' ? 'विवरण' : 'Value'}
-                </th>
-                <th scope="col" className="caption-text">
-                  {language === 'hi' ? 'टिप्पणी' : 'Note'}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {understandRows.map((row) => (
-                <tr key={`${row.label}-${row.value}`}>
-                  <td className="swiss-table-label" data-label={language === 'hi' ? 'विषय' : 'Label'}>
-                    <span className="swiss-table-label-inner">
-                      {row.kind === 'status' && <span className="swiss-status-mark" aria-hidden="true" />}
-                      <span>{row.label}</span>
-                    </span>
-                  </td>
-                  <td className="swiss-table-value tabular-nums" data-label={language === 'hi' ? 'विवरण' : 'Value'}>
-                    {row.value}
-                  </td>
-                  <td className="swiss-table-note" data-label={language === 'hi' ? 'टिप्पणी' : 'Note'}>
-                    <HighlightedText text={row.note} autoDetectDocumentTerms />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="swiss-band swiss-grid" aria-labelledby="section-act">
-        <div className="swiss-num-col">
-          <span className="swiss-index-num" aria-hidden="true">
-            03
-          </span>
-          <h2 id="section-act" className="swiss-band-title">
-            <ScrambleText text={language === 'hi' ? 'कदम उठाएं' : 'Act'} durationMs={480} />
-          </h2>
-        </div>
-
-        <div className="swiss-content-col">
-          <p className="caption-text swiss-table-caption">
-            {language === 'hi' ? 'अगले कदमों की सूची' : 'Next-steps checklist'}
-          </p>
-
-          <ul className="swiss-checklist">
-            {sample.steps.map((step, index) => {
-              const done = checkedSteps.includes(index);
-              return (
-                <li key={step} className="swiss-checklist-row">
-                  <button
-                    type="button"
-                    className={`swiss-check-btn ${done ? 'swiss-check-btn-done' : ''}`}
-                    aria-pressed={done}
-                    onClick={() => toggleStep(index)}
-                  >
-                    <span className={`swiss-checkbox-box ${done ? 'swiss-checkbox-box-done' : ''}`} aria-hidden="true">
-                      {done ? 'x' : ''}
-                    </span>
-                      <span className="swiss-check-text">
-                        <HighlightedText text={step} autoDetectDocumentTerms />
-                      </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-
-          <form className="swiss-ask-box" onSubmit={handleAskSubmit}>
-            <label htmlFor="home-ask-input" className="caption-text">
-              {copy.askHeading}
-            </label>
-            <div className="swiss-ask-row">
-              <input
-                id="home-ask-input"
-                type="text"
-                className="ask-input swiss-ask-input"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder={copy.askPlaceholder}
-              />
-              <button type="submit" className="btn btn-primary swiss-ask-submit">
-                {copy.askSend}
-              </button>
+      <section className="swiss-band swiss-grid" aria-label={language === 'hi' ? 'कैसे काम करता है' : 'How Samajh works'}>
+        <div className="swiss-how-grid">
+          {steps.map((step) => (
+            <div key={step.num} className="swiss-how-card">
+              <span className="swiss-how-num tabular-nums" aria-hidden="true">
+                {step.num}
+              </span>
+              <h2 className="swiss-band-title">{step.title}</h2>
+              <p className="body-text">{step.detail}</p>
             </div>
-          </form>
-
-          {qaMessages.length > 0 && (
-            <div className="swiss-qa-list" aria-live="polite">
-              {qaMessages.map((msg) => (
-                <div key={msg.id} className="swiss-qa-row">
-                  <p className="swiss-qa-q">{msg.question}</p>
-                  <p className="body-text">{msg.answer}</p>
-                  {msg.citedClause && (
-                    <p className="caption-text">
-                      {copy.citedLabel}: {msg.citedClause}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
       </section>
     </div>

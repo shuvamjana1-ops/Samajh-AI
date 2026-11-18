@@ -76,7 +76,6 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('autostart') !== '1';
   });
-  const [searchOpen, setSearchOpen] = useState(false);
 
   const [pages, setPages] = useState<UploadedPage[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -554,10 +553,9 @@ export default function App() {
         onLanguageChange={handleLanguageChange}
         theme={theme}
         onToggleTheme={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
-        currentPath={currentPath}
-        showHeaderLang={isNotFound || isSubPage || screen !== 'landing'}
+        showResetAction={currentPath !== '/' || screen !== 'landing'}
+        onResetToLanding={handleResetToLanding}
         onNavigate={navigateTo}
-        onOpenSearch={() => setSearchOpen(true)}
       />
 
       <main id="main-content" className="main-section" tabIndex={-1}>
@@ -578,7 +576,6 @@ export default function App() {
         {!isNotFound && !isSubPage && screen === 'landing' && (
           <HeroLanding
             language={language}
-            onLanguageChange={handleLanguageChange}
             fileInputRef={fileInputRef}
             onFilesSelected={(files) => handleFilesSelected(files, false)}
             onLoadSample={() => handleLoadSample()}
@@ -616,17 +613,14 @@ export default function App() {
             onAskQuestion={handleAskQuestion}
             initialCompletedSteps={initialCompletedSteps}
             onStepsChange={handleStepsChange}
+            onReset={handleResetToLanding}
           />
         )}
       </main>
 
       <DisclaimerFooter language={language} onNavigate={navigateTo} />
 
-      <SiteChromeExtras
-        onNavigate={navigateTo}
-        searchOpen={searchOpen}
-        onCloseSearch={() => setSearchOpen(false)}
-      />
+      <SiteChromeExtras />
     </div>
   );
 }

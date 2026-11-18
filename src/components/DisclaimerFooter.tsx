@@ -8,13 +8,9 @@ interface DisclaimerFooterProps {
 }
 
 const FOOTER_ROUTES: AppRoute[] = [
+  '/compress',
   '/privacy-policy',
   '/terms',
-  '/services',
-  '/compress',
-  '/about',
-  '/faq',
-  '/contact',
 ];
 
 export function DisclaimerFooter({ language, onNavigate }: DisclaimerFooterProps) {

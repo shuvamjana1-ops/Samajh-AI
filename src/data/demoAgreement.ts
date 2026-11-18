@@ -264,14 +264,14 @@ export interface UiCopy {
 export const UI_COPY: Record<Language, UiCopy> = {
   en: {
     brand: 'Samajh',
-    heroTitle: 'Paperwork, explained.',
+    heroTitle: 'Contracts, explained.',
     heroTitleHighlights: ['explained.'],
     heroSubtitle:
-      'Plain English and Hindi explanations for rental agreements, loan papers, and official notices.',
-    heroSubtitleHighlights: ['Plain English and Hindi'],
-    scanButton: 'Scan a document',
-    sampleButton: 'Open sample agreement',
-    fileHint: 'Photograph or upload a JPG, PNG, or PDF up to 8 MB and 5 pages. Raw files are never stored.',
+      'Upload any contract or official paper in English or Hindi. Get a plain-language summary and ask questions about the paper.',
+    heroSubtitleHighlights: ['English or Hindi', 'ask questions'],
+    scanButton: 'Upload contract or paper',
+    sampleButton: 'Try sample contract',
+    fileHint: 'JPG, PNG, or PDF up to 8 MB and 5 pages. Raw files are never stored.',
     fileHintHighlights: ['8 MB and 5 pages', 'never stored'],
     whatChecksHeading: 'Scan',
     checksList: [
@@ -379,11 +379,11 @@ export const UI_COPY: Record<Language, UiCopy> = {
     heroTitle: 'कागज़ात, आसान भाषा में।',
     heroTitleHighlights: ['आसान भाषा में।'],
     heroSubtitle:
-      'किराया समझौते, लोन के कागज़ और सरकारी नोटिस को सरल हिन्दी और अंग्रेज़ी में समझें।',
-    heroSubtitleHighlights: ['सरल हिन्दी और अंग्रेज़ी'],
-    scanButton: 'दस्तावेज़ स्कैन करें',
-    sampleButton: 'नमूना समझौता खोलें',
-    fileHint: 'JPG, PNG या PDF फोटो अपलोड करें (8 MB और 5 पेज तक)। मूल फ़ाइलें कभी सेव नहीं होतीं।',
+      'कोई भी समझौता, अनुबंध या सरकारी कागज़ अपलोड करें—सरल हिन्दी या अंग्रेज़ी में समझें और कागज़ के बारे में सवाल पूछें।',
+    heroSubtitleHighlights: ['सरल हिन्दी या अंग्रेज़ी', 'सवाल पूछें'],
+    scanButton: 'कागज़ या अनुबंध अपलोड करें',
+    sampleButton: 'नमूना अनुबंध देखें',
+    fileHint: 'JPG, PNG या PDF अपलोड करें (8 MB और 5 पेज तक)। मूल फ़ाइलें कभी सेव नहीं होतीं।',
     fileHintHighlights: ['8 MB और 5 पेज तक', 'कभी सेव नहीं होतीं'],
     whatChecksHeading: 'स्कैन करें',
     checksList: [

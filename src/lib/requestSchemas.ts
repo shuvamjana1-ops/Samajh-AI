@@ -568,3 +568,82 @@ export function validateAskBody(
     },
   };
 }
+
+const SENSITIVE_EXACT_PATHS = new Set([
+  '/firebase-applet-config.json',
+  '/firebase-applet-config.example.json',
+  '/firebase-blueprint.json',
+  '/firebase_applet_config.xml',
+  '/package.json',
+  '/package-lock.json',
+  '/bun.lock',
+  '/tsconfig.json',
+  '/eslint.config.mjs',
+  '/vite.config.ts',
+  '/firestore.rules',
+  '/firestore.rules.test.ts',
+  '/server.ts',
+  '/metadata.json',
+  '/security_spec.md',
+  '/readme.md',
+]);
+
+function normalizePosixPath(input: string): string {
+  const parts = input.split('/');
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      stack.pop();
+    } else {
+      stack.push(part);
+    }
+  }
+  return `/${stack.join('/')}`;
+}
+
+export function isBlockedSensitivePath(rawPath: string, isProd: boolean): boolean {
+  let decoded = rawPath;
+  try {
+    decoded = decodeURIComponent(rawPath);
+  } catch {
+    return true;
+  }
+
+  const normalized = normalizePosixPath(decoded.replace(/\\/g, '/').toLowerCase());
+
+  if (!isProd && normalized.startsWith('/node_modules/.vite/')) {
+    return false;
+  }
+
+  // Block Vite /@fs/ filesystem access except pre-bundled node_modules dependencies in dev
+  if (normalized.startsWith('/@fs/')) {
+    if (isProd) return true;
+    const isNodeModulesAsset =
+      /^\/@fs\/.*\/node_modules\/(?!\.vite\/.*\.(?:env|key|pem)).+/.test(normalized) &&
+      !/(^|\/)\.[^/]+/.test(normalized) &&
+      !/\.(env|sql|bak|zip|tar|gz|tgz|map|rules|log|pem|key|crt|p12)$/i.test(normalized);
+    if (!isNodeModulesAsset) {
+      return true;
+    }
+  }
+
+  if (/(^|\/)\.[^/]+/.test(normalized)) {
+    return true;
+  }
+  if (SENSITIVE_EXACT_PATHS.has(normalized)) {
+    return true;
+  }
+  const baseName = normalized.slice(normalized.lastIndexOf('/'));
+  if (SENSITIVE_EXACT_PATHS.has(baseName)) {
+    return true;
+  }
+  if (/\.(env|sql|bak|zip|tar|gz|tgz|map|rules|log|pem|key|crt|p12)$/i.test(normalized)) {
+    return true;
+  }
+  if (isProd && /\.(ts|tsx)$/i.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+

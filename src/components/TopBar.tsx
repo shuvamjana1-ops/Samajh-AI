@@ -1,7 +1,5 @@
-import { Menu, Search, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
 import { UI_COPY } from '../data/demoAgreement';
-import { HEADER_NAV_ROUTES, SITE_PAGES, type AppRoute } from '../data/sitePages';
+import { type AppRoute } from '../data/sitePages';
 import { LANGUAGE_CONFIG } from '../lib/documentLogic';
 import type { Language, ThemeMode } from '../types/document';
 
@@ -10,10 +8,9 @@ interface TopBarProps {
   onLanguageChange: (lang: Language) => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
-  currentPath: string;
-  showHeaderLang: boolean;
+  showResetAction: boolean;
+  onResetToLanding: () => void;
   onNavigate: (path: AppRoute) => void;
-  onOpenSearch: () => void;
 }
 
 const LANGUAGES: Language[] = ['en', 'hi'];
@@ -23,52 +20,17 @@ export function TopBar({
   onLanguageChange,
   theme,
   onToggleTheme,
-  currentPath,
-  showHeaderLang,
+  showResetAction,
+  onResetToLanding,
   onNavigate,
-  onOpenSearch,
 }: TopBarProps) {
   const copy = UI_COPY[language];
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const toggleBtnRef = useRef<HTMLButtonElement | null>(null);
-  const drawerRef = useRef<HTMLDivElement | null>(null);
 
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, path: AppRoute) => {
+  const handleHomeClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    setMobileMenuOpen(false);
-    onNavigate(path);
+    onNavigate('/');
   };
-
-  useEffect(() => {
-    if (!mobileMenuOpen) return;
-    const drawer = drawerRef.current;
-    const focusables = drawer?.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled])'
-    );
-    focusables?.[0]?.focus();
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMobileMenuOpen(false);
-        toggleBtnRef.current?.focus();
-        return;
-      }
-      if (e.key === 'Tab' && focusables && focusables.length > 0) {
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mobileMenuOpen]);
 
   return (
     <header className="topbar-section">
@@ -78,59 +40,39 @@ export function TopBar({
             href="/"
             className="brand-wordmark"
             aria-label={`${copy.brand} home`}
-            onClick={(e) => handleLinkClick(e, '/')}
+            onClick={handleHomeClick}
           >
             {copy.brand}
           </a>
         </div>
 
-        <nav className="topbar-nav" aria-label="Primary">
-          {HEADER_NAV_ROUTES.map((route) => {
-            const meta = SITE_PAGES[route];
-            const active = currentPath === route;
-            return (
-              <a
-                key={route}
-                href={route}
-                className={`nav-link ${active ? 'nav-link-active' : ''}`}
-                aria-current={active ? 'page' : undefined}
-                onClick={(e) => handleLinkClick(e, route)}
-              >
-                {meta.navLabel}
-              </a>
-            );
-          })}
-        </nav>
-
         <div className="topbar-controls">
-          {showHeaderLang && (
-            <div className="swiss-lang-switch swiss-lang-switch-compact" role="group" aria-label="Language">
-              {LANGUAGES.map((code) => {
-                const active = language === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    className={`swiss-text-toggle ${active ? 'swiss-text-toggle-active' : ''}`}
-                    aria-pressed={active}
-                    onClick={() => onLanguageChange(code)}
-                  >
-                    {LANGUAGE_CONFIG[code].nativeLabel}
-                  </button>
-                );
-              })}
-            </div>
+          {showResetAction && (
+            <button
+              type="button"
+              className="swiss-text-toggle"
+              onClick={onResetToLanding}
+            >
+              {copy.newScan}
+            </button>
           )}
 
-          <button
-            type="button"
-            className="swiss-text-toggle topbar-desktop-action"
-            onClick={onOpenSearch}
-            aria-label="Search Samajh pages and FAQ topics"
-          >
-            <Search size={15} aria-hidden="true" />
-            <span>Search</span>
-          </button>
+          <div className="swiss-lang-switch swiss-lang-switch-compact" role="group" aria-label="Language">
+            {LANGUAGES.map((code) => {
+              const active = language === code;
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  className={`swiss-text-toggle ${active ? 'swiss-text-toggle-active' : ''}`}
+                  aria-pressed={active}
+                  onClick={() => onLanguageChange(code)}
+                >
+                  {LANGUAGE_CONFIG[code].nativeLabel}
+                </button>
+              );
+            })}
+          </div>
 
           <button
             type="button"
@@ -148,75 +90,8 @@ export function TopBar({
           >
             {theme === 'dark' ? copy.themeLight : copy.themeDark}
           </button>
-
-          <button
-            ref={toggleBtnRef}
-            type="button"
-            className="swiss-text-toggle mobile-menu-toggle"
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-nav-drawer"
-            aria-label={
-              mobileMenuOpen
-                ? 'Close primary navigation menu'
-                : 'Open primary navigation menu'
-            }
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-          >
-            {mobileMenuOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
-          </button>
         </div>
       </div>
-
-      {mobileMenuOpen && (
-        <div
-          id="mobile-nav-drawer"
-          ref={drawerRef}
-          className="mobile-drawer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mobile navigation"
-        >
-          <div className="mobile-drawer-links">
-            {HEADER_NAV_ROUTES.map((route) => {
-              const meta = SITE_PAGES[route];
-              const active = currentPath === route;
-              return (
-                <a
-                  key={route}
-                  href={route}
-                  className={`nav-link mobile-nav-link ${active ? 'nav-link-active' : ''}`}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={(e) => handleLinkClick(e, route)}
-                >
-                  {meta.navLabel}
-                </a>
-              );
-            })}
-            <div className="mobile-drawer-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenSearch();
-                }}
-              >
-                Search site
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  toggleBtnRef.current?.focus();
-                }}
-              >
-                Close menu
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   );
 }

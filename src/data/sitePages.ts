@@ -242,7 +242,7 @@ export const INDEXABLE_ROUTES: AppRoute[] = [
   '/terms',
 ];
 
-export const HEADER_NAV_ROUTES: AppRoute[] = ['/services', '/compress', '/about', '/faq', '/contact'];
+export const HEADER_NAV_ROUTES: AppRoute[] = [];
 
 export function isKnownRoute(pathname: string): pathname is AppRoute {
   return Object.prototype.hasOwnProperty.call(SITE_PAGES, pathname);

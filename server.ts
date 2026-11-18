@@ -25,6 +25,7 @@ import {
 import {
   DailyQuotaTracker,
   type EnvValidationResult,
+  isBlockedSensitivePath,
   validateAnalyzeBody,
   validateAskBody,
   validateContactBody,
@@ -326,54 +327,6 @@ function createRateLimiter(maxRequests: number, windowMs: number) {
   };
 }
 
-const SENSITIVE_EXACT_PATHS = new Set([
-  '/firebase-applet-config.json',
-  '/firebase-applet-config.example.json',
-  '/firebase-blueprint.json',
-  '/firebase_applet_config.xml',
-  '/package.json',
-  '/package-lock.json',
-  '/bun.lock',
-  '/tsconfig.json',
-  '/eslint.config.mjs',
-  '/vite.config.ts',
-  '/firestore.rules',
-  '/firestore.rules.test.ts',
-  '/server.ts',
-  '/metadata.json',
-  '/security_spec.md',
-  '/readme.md',
-]);
-
-function isBlockedSensitivePath(rawPath: string, hasViteImportQuery = false): boolean {
-  let decoded = rawPath;
-  try {
-    decoded = decodeURIComponent(rawPath);
-  } catch {
-    return true;
-  }
-  const normalized = decoded.replace(/\\/g, '/').toLowerCase();
-  if (!IS_PROD && normalized.startsWith('/node_modules/.vite/')) {
-    return false;
-  }
-  if (!IS_PROD && hasViteImportQuery && normalized === '/firebase-applet-config.json') {
-    return false;
-  }
-  if (/(^|\/)\.[^/]+/.test(normalized)) {
-    return true;
-  }
-  if (SENSITIVE_EXACT_PATHS.has(normalized)) {
-    return true;
-  }
-  if (/\.(env|sql|bak|zip|tar|gz|tgz|map|rules|log|pem|key|crt|p12)$/i.test(normalized)) {
-    return true;
-  }
-  if (IS_PROD && /\.(ts|tsx)$/i.test(normalized)) {
-    return true;
-  }
-  return false;
-}
-
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -559,7 +512,7 @@ async function startServer() {
   app.set('trust proxy', 1);
 
   app.use((req, res, next) => {
-    if (isBlockedSensitivePath(req.path, Object.prototype.hasOwnProperty.call(req.query, 'import'))) {
+    if (isBlockedSensitivePath(req.path, IS_PROD)) {
       res.status(404).type('text/plain').send('Not found');
       return;
     }
@@ -587,9 +540,7 @@ async function startServer() {
       return;
     }
 
-    const scriptSrc = IS_PROD
-      ? "script-src 'self' https://apis.google.com https://www.gstatic.com"
-      : "script-src 'self' 'unsafe-inline' https://apis.google.com https://www.gstatic.com";
+    const scriptSrc = IS_PROD ? "script-src 'self'" : "script-src 'self' 'unsafe-inline'";
     const styleSrc = IS_PROD
       ? "style-src 'self' https://fonts.googleapis.com"
       : "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com";
@@ -602,9 +553,9 @@ async function startServer() {
       scriptSrc,
       styleSrc,
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://*.googleusercontent.com",
-      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://apis.google.com",
-      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com",
+      "img-src 'self' data: blob:",
+      "connect-src 'self'",
+      "frame-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

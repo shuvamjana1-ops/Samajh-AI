@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DailyQuotaTracker,
+  isBlockedSensitivePath,
   validateAnalyzeBody,
   validateAskBody,
   validateContactBody,
@@ -188,3 +189,19 @@ test('validateTranslateBody and validateAskBody enforce strict analysis shape', 
     false
   );
 });
+
+test('isBlockedSensitivePath blocks firebase config, /@fs/ workspace reads, dotfiles, and traversal', () => {
+  assert.equal(isBlockedSensitivePath('/firebase-applet-config.json', false), true);
+  assert.equal(isBlockedSensitivePath('/firebase-applet-config.json', true), true);
+  assert.equal(isBlockedSensitivePath('/@fs/app/applet/firebase-applet-config.json', false), true);
+  assert.equal(isBlockedSensitivePath('/@fs/app/applet/.env', false), true);
+  assert.equal(isBlockedSensitivePath('/assets/../firebase-applet-config.json', false), true);
+  assert.equal(isBlockedSensitivePath('/%2eenv', false), true);
+  assert.equal(isBlockedSensitivePath('/%ZZ', false), true);
+
+  assert.equal(isBlockedSensitivePath('/node_modules/.vite/deps/react.js', false), false);
+  assert.equal(isBlockedSensitivePath('/@fs/app/applet/node_modules/vite/dist/client/client.mjs', false), false);
+  assert.equal(isBlockedSensitivePath('/src/App.tsx', false), false);
+  assert.equal(isBlockedSensitivePath('/src/App.tsx', true), true);
+});
+

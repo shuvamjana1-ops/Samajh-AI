@@ -38,6 +38,7 @@ interface ResultWorkspaceProps {
   onAskQuestion: (question: string) => void;
   initialCompletedSteps?: number[];
   onStepsChange: (completedSteps: number[]) => void;
+  onReset?: () => void;
 }
 
 interface SpeechRecognitionInstance {
@@ -75,6 +76,7 @@ export function ResultWorkspace({
   onAskQuestion,
   initialCompletedSteps = [],
   onStepsChange,
+  onReset,
 }: ResultWorkspaceProps) {
   const copy = UI_COPY[language];
   const [activeTab, setActiveTab] = useState<ResultTab>('deadlines');
@@ -347,6 +349,16 @@ export function ResultWorkspace({
                 )}
                 <span>{isSpeaking ? copy.listenStop : copy.listenPlay}</span>
               </button>
+
+              {onReset && (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={onReset}
+                >
+                  <span>{copy.newScan}</span>
+                </button>
+              )}
             </div>
           </div>
 
